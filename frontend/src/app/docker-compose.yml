@@ -1,0 +1,29 @@
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: goscript-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    networks:
+      - goscript-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: goscript-frontend
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    networks:
+      - goscript-network
+
+networks:
+  goscript-network:
+    driver: bridge
