@@ -7,6 +7,7 @@ import { registerGoScript }  from '../../utils/register-goscript';
 import { FileService }       from '../../services/file.service';
 import { ConsoleService, LogEntry } from '../../services/console.service';
 import { GOSCRIPT_INITIAL_CODE }    from '../../constants/goscript.constants';
+import { CompilerService }     from '../../services/compiler.service';
 
 @Component({
   selector: 'app-editor',
@@ -24,6 +25,7 @@ export class Editor implements AfterViewInit, OnDestroy {
 
   private fileService    = inject(FileService);
   private consoleService = inject(ConsoleService);
+  private compilerService = inject(CompilerService);
 
   constructor() {
     let lastLoadedFileId: number | null = null;
@@ -92,35 +94,7 @@ export class Editor implements AfterViewInit, OnDestroy {
   // Por ahora evalúa JS directamente; cuando el parser esté listo
   // esto será un POST a /api/compile y recibirá errores/símbolos/AST.
   runCode(): void {
-    const code = this.editor.getValue();
-    const logs: LogEntry[] = [{ type: 'sys', text: '▸  Ejecutando...' }];
-
-    const orig = {
-      log:   console.log,
-      error: console.error,
-      warn:  console.warn,
-      info:  console.info,
-    };
-
-    const fmt = (args: any[]) =>
-      args.map(a => typeof a === 'object' && a !== null ? JSON.stringify(a, null, 2) : String(a)).join(' ');
-
-    console.log   = (...a) => logs.push({ type: 'log',   text: fmt(a) });
-    console.error = (...a) => logs.push({ type: 'error', text: fmt(a) });
-    console.warn  = (...a) => logs.push({ type: 'warn',  text: fmt(a) });
-    console.info  = (...a) => logs.push({ type: 'info',  text: fmt(a) });
-
-    try {
-      // eslint-disable-next-line no-eval
-      eval(code);
-      logs.push({ type: 'sys', text: '▸  Completado sin errores.' });
-    } catch (e: any) {
-      logs.push({ type: 'error', text: `×  ${e.name}: ${e.message}` });
-    } finally {
-      Object.assign(console, orig);
-    }
-
-    this.consoleService.append(logs);
+    this.compilerService.compile(this.editor.getValue());
   }
 
   getEditor(): monaco.editor.IStandaloneCodeEditor {
