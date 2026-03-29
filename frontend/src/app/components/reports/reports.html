@@ -1,1 +1,130 @@
-<p>reports works!</p>
+<div class="flex flex-col h-full bg-[#1a1a1a]">
+
+  <!-- Header con tabs -->
+  <div class="flex items-stretch h-8 bg-[#252526] border-b border-[#2a2a2a] shrink-0 px-1">
+
+    @for (tab of tabs; track tab.id) {
+      <button
+        (click)="setTab(tab.id)"
+        class="flex items-center gap-1.5 px-3 text-[11px] font-sans border-b-2 transition-colors"
+        [class.text-[#cccccc]]="isTab(tab.id)"
+        [class.text-[#5F5E5A]]="!isTab(tab.id)"
+        [class.border-[#EF9F27]]="isTab(tab.id)"
+        [class.border-transparent]="!isTab(tab.id)">
+        {{ tab.label }}
+
+        <!-- Badge contador de errores -->
+        @if (tab.id === 'errores' && reportsService.errors().length > 0) {
+          <span class="bg-[#3a1515] text-[#f09595] text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+            {{ reportsService.errors().length }}
+          </span>
+        }
+      </button>
+    }
+  </div>
+
+  <!-- Contenido -->
+  <div class="flex-1 overflow-y-auto">
+
+    <!-- ── Tab Errores ── -->
+    @if (isTab('errores')) {
+      @if (reportsService.errors().length === 0) {
+        <div class="flex flex-col items-center justify-center h-36 gap-2">
+          <span class="text-2xl text-[#28C840]">✓</span>
+          <span class="text-xs text-[#cccccc] font-sans">Sin errores detectados</span>
+          <span class="text-[11px] text-[#5F5E5A] font-sans">Ejecuta el código para analizar</span>
+        </div>
+      } @else {
+        <table class="w-full text-[11px] border-collapse">
+          <thead>
+            <tr class="border-b border-[#2a2a2a]">
+              @for (h of ['Línea','Col','Tipo','Descripción']; track h) {
+                <th class="px-2.5 py-1.5 text-left text-[#5F5E5A] font-medium font-sans whitespace-nowrap">{{ h }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (err of reportsService.errors(); track $index) {
+              <tr class="border-b border-[#1e1e1e]">
+                <td class="px-2.5 py-1 font-mono text-[#b0b0b0] whitespace-nowrap">{{ err.line }}</td>
+                <td class="px-2.5 py-1 font-mono text-[#b0b0b0] whitespace-nowrap">{{ err.col }}</td>
+                <td class="px-2.5 py-1">
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-sans"
+                    [class.bg-[#3a1515]]="err.type === 'lexico'"
+                    [class.text-[#f09595]]="err.type === 'lexico'"
+                    [class.bg-[#3a2a10]]="err.type === 'sintactico'"
+                    [class.text-[#FAC775]]="err.type === 'sintactico'"
+                    [class.bg-[#10233a]]="err.type === 'semantico'"
+                    [class.text-[#85B7EB]]="err.type === 'semantico'">
+                    {{ err.type }}
+                  </span>
+                </td>
+                <td class="px-2.5 py-1 text-[#f09595] font-mono break-all">{{ err.message }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+
+    <!-- ── Tab Símbolos ── -->
+    @if (isTab('simbolos')) {
+      @if (reportsService.symbols().length === 0) {
+        <div class="flex flex-col items-center justify-center h-36 gap-2">
+          <span class="text-2xl text-[#3a3a3a]">⊘</span>
+          <span class="text-xs text-[#6b6b6b] font-sans">Tabla de símbolos vacía</span>
+          <span class="text-[11px] text-[#444] font-sans">Ejecuta el código para analizar</span>
+        </div>
+      } @else {
+        <table class="w-full text-[11px] border-collapse">
+          <thead>
+            <tr class="border-b border-[#2a2a2a]">
+              @for (h of ['Nombre','Tipo','Dato','Entorno','Línea']; track h) {
+                <th class="px-2.5 py-1.5 text-left text-[#5F5E5A] font-medium font-sans whitespace-nowrap">{{ h }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (sym of reportsService.symbols(); track $index) {
+              <tr class="border-b border-[#1e1e1e]">
+                <td class="px-2.5 py-1 font-mono text-[#85B7EB] whitespace-nowrap">{{ sym.name }}</td>
+                <td class="px-2.5 py-1">
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-sans"
+                    [class.bg-[#1a2a1a]]="sym.kind === 'variable'"
+                    [class.text-[#5DCAA5]]="sym.kind === 'variable'"
+                    [class.bg-[#2a1a2a]]="sym.kind === 'funcion'"
+                    [class.text-[#AFA9EC]]="sym.kind === 'funcion'"
+                    [class.bg-[#1a1a2a]]="sym.kind === 'parametro'"
+                    [class.text-[#85B7EB]]="sym.kind === 'parametro'">
+                    {{ sym.kind }}
+                  </span>
+                </td>
+                <td class="px-2.5 py-1 font-mono text-[#FAC775] whitespace-nowrap">{{ sym.dataType }}</td>
+                <td class="px-2.5 py-1 font-mono text-[#9e9e9e] whitespace-nowrap">{{ sym.scope }}</td>
+                <td class="px-2.5 py-1 font-mono text-[#5F5E5A] whitespace-nowrap">{{ sym.line }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+
+    <!-- ── Tab AST ── -->
+    @if (isTab('ast')) {
+      @if (!reportsService.ast()) {
+        <div class="flex flex-col items-center justify-center h-36 gap-2">
+          <span class="text-2xl text-[#3a3a3a]">⊘</span>
+          <span class="text-xs text-[#6b6b6b] font-sans">AST no generado</span>
+          <span class="text-[11px] text-[#444] font-sans">Ejecuta el código para ver el árbol</span>
+        </div>
+      } @else {
+        <div class="p-2 font-mono text-[11px]">
+          <!-- Árbol AST renderizado recursivamente via JSON por ahora -->
+          <!-- Cuando integres el parser, este nodo será el AST real -->
+          <pre class="text-[#d4d4d4] whitespace-pre-wrap break-all text-[10px]">{{ reportsService.ast() | json }}</pre>
+        </div>
+      }
+    }
+
+  </div>
+</div>

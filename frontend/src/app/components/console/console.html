@@ -1,3 +1,35 @@
-<div class="bg-black text-green-400 text-sm p-2 h-full overflow-auto">
-  Consola...
+<div class="flex flex-col h-full bg-[#141414]">
+
+  <!-- Header de la consola -->
+  <div class="flex items-center gap-2 px-4 py-1 bg-[#1a1a1a] border-t border-[#2a2a2a] shrink-0">
+    <span class="text-[10px] uppercase tracking-widest text-[#5F5E5A] font-mono">Consola</span>
+
+    <!-- Indicador: verde = ok, rojo = errores -->
+    <span
+      class="w-2 h-2 rounded-full"
+      [style.background]="hasErrors ? '#f09595' : '#28C840'">
+    </span>
+
+    <span class="ml-auto text-[10px] text-[#444] font-sans">Ctrl+Enter para ejecutar</span>
+
+    <!-- Botón limpiar -->
+    <button
+      (click)="clear()"
+      class="text-[10px] text-[#5F5E5A] hover:text-[#cccccc] px-2 py-0.5 border border-transparent hover:border-[#444] rounded transition-colors font-sans">
+      Limpiar
+    </button>
+  </div>
+
+  <!-- Lista de logs -->
+  <div class="flex-1 overflow-y-auto px-4 py-2 flex flex-col gap-0.5">
+    @for (log of consoleService.logs(); track $index) {
+      <div
+        class="text-xs leading-relaxed font-mono whitespace-pre-wrap break-all pl-2"
+        [style.color]="getColor(log.type)"
+        [style.border-left]="getBorder(log.type)">
+        {{ log.text }}
+      </div>
+    }
+  </div>
+
 </div>

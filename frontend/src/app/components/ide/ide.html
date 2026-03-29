@@ -1,27 +1,44 @@
-<div class="h-screen flex flex-col bg-[#1e1e1e] text-white">
+<div class="h-screen flex flex-col bg-[#1e1e1e] text-white overflow-hidden">
 
-  <!-- Top bar -->
-  <div class="h-10 bg-[#2d2d2d] flex items-center px-4 text-sm">
-    GoScript IDE
-  </div>
-
-  <!-- Tabs -->
+  <!-- Tabs (incluye barra de acciones de archivo) -->
   <app-tabs></app-tabs>
 
-  <!-- Main area -->
+  <!-- Área principal: editor + consola | reportes -->
   <div class="flex flex-1 min-h-0">
 
-    <!-- Editor + consola -->
+    <!-- Columna izquierda: editor + resize + consola -->
     <div class="flex flex-col flex-1 min-w-0">
-      <app-editor class="flex-1"></app-editor>
-      <app-console class="h-40"></app-console>
+
+      <!-- Editor ocupa el espacio restante -->
+      <div class="flex-1 min-h-0">
+        <app-editor class="block w-full h-full"></app-editor>
+      </div>
+
+      <!-- Handle arrastrable para redimensionar la consola -->
+      <div
+        (mousedown)="onResizeStart($event)"
+        class="h-1.5 bg-[#2a2a2a] hover:bg-[#EF9F2760] border-y border-[#3a3a3a] cursor-row-resize transition-colors shrink-0">
+      </div>
+
+      <!-- Consola con altura dinámica -->
+      <div [style.height.px]="consoleHeight" class="shrink-0 min-h-0">
+        <app-console class="block w-full h-full"></app-console>
+      </div>
+
     </div>
 
-    <!-- Panel derecho -->
-    <div class="w-80 bg-[#252526] border-l border-gray-700">
-      <app-reports></app-reports>
+    <!-- Panel derecho: Reportes -->
+    <div class="w-72 shrink-0 bg-[#1a1a1a] border-l border-[#2a2a2a] flex flex-col">
+      <app-reports class="flex-1 min-h-0 flex flex-col"></app-reports>
     </div>
 
+  </div>
+
+  <!-- Status bar -->
+  <div class="h-5 bg-[#BA7517] flex items-center px-4 gap-5 shrink-0">
+    @for (item of ['GoScript', 'UTF-8', 'LF', 'Tab: 2']; track item) {
+      <span class="text-[10.5px] text-[#1a1a1a] opacity-85 font-sans tracking-wide">{{ item }}</span>
+    }
   </div>
 
 </div>

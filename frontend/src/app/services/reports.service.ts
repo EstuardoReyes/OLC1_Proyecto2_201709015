@@ -1,0 +1,47 @@
+import { Injectable, signal } from '@angular/core';
+
+export interface ErrorEntry {
+  line:    number;
+  col:     number;
+  type:    'lexico' | 'sintactico' | 'semantico';
+  message: string;
+}
+
+export interface SymbolEntry {
+  name:     string;
+  kind:     'variable' | 'funcion' | 'parametro';
+  dataType: string;
+  scope:    string;
+  line:     number;
+}
+
+export interface ASTNode {
+  type:      string;
+  value?:    string;
+  children?: ASTNode[];
+}
+
+/**
+ * ReportsService
+ * Almacena los resultados del análisis léxico, sintáctico y semántico.
+ *
+ * Cuando integres tu parser de GoScript (NestJS + Jison),
+ * llama a setErrors(), setSymbols() y setAst() con los datos reales
+ * que devuelva tu API en /api/compile.
+ */
+@Injectable({ providedIn: 'root' })
+export class ReportsService {
+  errors  = signal<ErrorEntry[]>([]);
+  symbols = signal<SymbolEntry[]>([]);
+  ast     = signal<ASTNode | null>(null);
+
+  setErrors(errors: ErrorEntry[]):   void { this.errors.set(errors); }
+  setSymbols(symbols: SymbolEntry[]): void { this.symbols.set(symbols); }
+  setAst(ast: ASTNode | null):       void { this.ast.set(ast); }
+
+  clearAll(): void {
+    this.errors.set([]);
+    this.symbols.set([]);
+    this.ast.set(null);
+  }
+}
