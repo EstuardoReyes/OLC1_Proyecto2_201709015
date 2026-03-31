@@ -52,25 +52,47 @@ export class Editor implements AfterViewInit, OnDestroy {
     registerGoScript();
 
     this.editor = monaco.editor.create(this.editorContainer.nativeElement, {
-      value:                  GOSCRIPT_INITIAL_CODE,
-      language:               'goscript',
-      theme:                  'vs-dark',
-      fontSize:               13.5,
-      fontFamily:             "'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
-      fontLigatures:          true,
-      minimap:                { enabled: false },
-      scrollBeyondLastLine:   false,
-      automaticLayout:        true,
-      padding:                { top: 14, bottom: 14 },
-      lineNumbers:            'on',
-      glyphMargin:            false,
-      folding:                true,
-      tabSize:                2,
-      renderLineHighlight:    'gutter',
-      cursorBlinking:         'smooth',
-      smoothScrolling:        true,
-      quickSuggestions:       true,
-      fixedOverflowWidgets:   true,
+      value:                GOSCRIPT_INITIAL_CODE,
+      language:             'goscript',
+      theme:                'vs-dark',
+      fontSize:             13.5,
+      fontFamily:           "'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+      fontLigatures:        true,
+      minimap:              { enabled: false },
+      scrollBeyondLastLine: false,
+      automaticLayout:      true,
+      padding:              { top: 14, bottom: 14 },
+      lineNumbers:          'on',
+      glyphMargin:          false,
+      folding:              true,
+      tabSize:              2,
+      renderLineHighlight:  'gutter',
+      cursorBlinking:       'smooth',
+      smoothScrolling:      true,
+      fixedOverflowWidgets: true,
+ 
+      // ── FIX cursor salta fuera de paréntesis ──────────────────
+      // Monaco por defecto cierra pares automáticamente ({}, (), [], "")
+      // lo cual mueve el cursor y choca con los snippets
+      autoClosingBrackets:      'never',
+      autoClosingQuotes:        'never',
+      autoSurround:             'never',
+ 
+      // ── FIX sugerencias extras ────────────────────────────────
+      // Desactiva las sugerencias basadas en palabras del documento
+      wordBasedSuggestions:     'off',
+ 
+      // Sugerencias solo con Ctrl+Space, no mientras escribes
+      quickSuggestions:         false,
+ 
+      // No aceptar sugerencia al presionar Enter (evita inserciones accidentales)
+      acceptSuggestionOnEnter:  'off',
+    });
+ 
+    this.editor.onDidChangeModelContent(() => {
+      if (!this.ignoreContentChange) {
+        this.fileService.updateContent(this.editor.getValue());
+      }
     });
 
     // Guardar contenido en FileService al escribir
@@ -91,7 +113,7 @@ export class Editor implements AfterViewInit, OnDestroy {
   }
 
   // ── Ejecutar código ───────────────────────────────────────────
-  // Por ahora evalúa JS directamente; cuando el parser esté listo
+  // Por ahora evalúa JS directamente  ; cuando el parser esté listo
   // esto será un POST a /api/compile y recibirá errores/símbolos/AST.
   runCode(): void {
     this.compilerService.compile(this.editor.getValue());

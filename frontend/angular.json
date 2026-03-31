@@ -26,6 +26,9 @@
                 "output": "/assets/monaco-editor/vs"
               }
             ],
+            "loader": {
+              ".ttf": "file"
+            },
             "styles": [
               "src/styles.css"
             ]
@@ -35,8 +38,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "5mb",
+                  "maximumError": "10mb"
                 },
                 {
                   "type": "anyComponentStyle",

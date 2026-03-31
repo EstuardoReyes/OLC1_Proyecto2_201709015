@@ -1,15 +1,5 @@
 // ─── Código inicial que aparece al abrir el IDE ──────────────────
-export const GOSCRIPT_INITIAL_CODE = `// GoScript IDE — Proyecto 2
-// Presiona ▶ Ejecutar o Ctrl+Enter para compilar
-
-func principal() {
-  var x int = 10;
-  var y int = 20;
-  var suma int = x + y;
-  fmt.Println(suma);
-}
-
-principal();
+export const GOSCRIPT_INITIAL_CODE = `// ¡Bienvenido a GoScript IDE!
 `;
 
 // ─── Palabras reservadas del lenguaje GoScript ───────────────────

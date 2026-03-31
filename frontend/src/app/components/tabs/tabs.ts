@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule }      from '@angular/common';
 import { FileService }       from '../../services/file.service';
-
+import { CompilerService }     from '../../services/compiler.service';  
 @Component({
   selector: 'app-tabs',
   standalone: true,
@@ -10,6 +10,7 @@ import { FileService }       from '../../services/file.service';
 })
 export class Tabs {
   fileService = inject(FileService);
+  compileService = inject(CompilerService);
 
   isActive(id: number): boolean {
     return this.fileService.activeTabId() === id;
@@ -27,5 +28,6 @@ export class Tabs {
   newFile():   void { this.fileService.createFile(); }
   openFile():  void { this.fileService.openFile(); }
   saveFile():  void { this.fileService.saveFile(); }
-  ejecutar(): void { /* delega al EditorComponent vía IDEComponent */ }
+  ejecutar():  void { this.compileService.compile(this.fileService.activeFile()?.content || '');}
+
 }

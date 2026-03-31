@@ -11,6 +11,7 @@ export class InterpreterService {
 
   compile(req: CompileRequest): CompileResponse {
     const { code } = req;
+    console.log('Compilando código:\n', code);
 
     // ── Validación básica ───────────────────────────────────────
     if (!code || code.trim().length === 0) {

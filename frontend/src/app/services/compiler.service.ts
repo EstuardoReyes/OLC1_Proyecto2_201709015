@@ -26,18 +26,19 @@ export class CompilerService {
   private http           = inject(HttpClient);
   private reportsService = inject(ReportsService);
   private consoleService = inject(ConsoleService);
-
-  private readonly API = '/api/interpreter/compile';
+  private API_URL        = 'http://localhost:3000';
+  
 
   async compile(code: string): Promise<void> {
     // Indicar que está compilando
+    console.log('Enviando código al compilador ', code);
     this.consoleService.append([
       { type: 'sys', text: '▸  Enviando al compilador...' }
     ]);
 
     try {
       const res = await firstValueFrom(
-        this.http.post<CompileResponse>(this.API, { code })
+        this.http.post<CompileResponse>(`${this.API_URL}/api/interpreter/compile`, { code })
       );
 
       // ── Consola: líneas de output ─────────────────────────────

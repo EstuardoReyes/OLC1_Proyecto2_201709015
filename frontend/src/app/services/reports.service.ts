@@ -9,7 +9,7 @@ export interface ErrorEntry {
 
 export interface SymbolEntry {
   name:     string;
-  kind:     'variable' | 'funcion' | 'parametro';
+  kind:     'variable' | 'funcion' | 'parametro' | 'struct';
   dataType: string;
   scope:    string;
   line:     number;
