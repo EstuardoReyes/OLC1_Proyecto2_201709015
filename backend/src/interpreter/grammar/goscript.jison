@@ -20,7 +20,7 @@
 
 /* Palabras reservadas */
 "int"                               return 'INT';
-"float64"                           return 'FLOAT64';
+"float64"                           return 'FLOAT';
 "string"                            return 'STRING';
 "bool"                              return 'BOOL';
 "rune"                              return 'RUNE';
@@ -71,16 +71,16 @@
 \'([^\'\\]|\\.)\'                   return 'LIT_RUNE';
 
 /* Operadores aritméticos de asignación */
-"+="                                return 'PLUS_EQ';
-"-="                                return 'MINUS_EQ';
+"+="                                return 'MAS_IGUAL';
+"-="                                return 'MENOS_IGUAL';
 
 /* Operadores de comparación */
-"=="                                return 'EQ_EQ';
-"!="                                return 'NOT_EQ';
-">="                                return 'GTE';
-"<="                                return 'LTE';
-">"                                 return 'GT';
-"<"                                 return 'LT';
+"=="                                return 'DOBLE_IGUAL';
+"!="                                return 'NO_IGUAL';
+">="                                return 'MAYOR_IGUAL';
+"<="                                return 'MENOR_IGUAL';
+">"                                 return 'MAYOR';
+"<"                                 return 'MENOR';
 
 /* Operadores lógicos */
 "&&"                                return 'AND';
@@ -91,35 +91,35 @@
 ":="                                return 'DECL_SHORT';
 
 /* Incremento / decremento */
-"++"                                return 'PLUS_PLUS';
-"--"                                return 'MINUS_MINUS';
+"++"                                return 'INCREMENTO';
+"--"                                return 'DECREMENTO';
 
 /* Operadores aritméticos */
-"+"                                 return 'PLUS';
-"-"                                 return 'MINUS';
-"*"                                 return 'TIMES';
-"/"                                 return 'DIV';
-"%"                                 return 'MOD';
+"+"                                 return 'MAS';
+"-"                                 return 'MENOS';
+"*"                                 return 'ASTERISCO';
+"/"                                 return 'DIVISION';
+"%"                                 return 'PORCENTAJE';
 
 /* Asignación */
-"="                                 return 'EQUALS';
+"="                                 return 'IGUAL';
 
 /* Delimitadores */
-"("                                 return 'LPAREN';
-")"                                 return 'RPAREN';
-"{"                                 return 'LBRACE';
-"}"                                 return 'RBRACE';
-"["                                 return 'LBRACKET';
-"]"                                 return 'RBRACKET';
+"("                                 return 'PARENTESIS_A';
+")"                                 return 'PARENTESIS_C';
+"{"                                 return 'LLAVE_A';
+"}"                                 return 'LLAVE_C';
+"["                                 return 'CORCHETE_A';
+"]"                                 return 'CORCHETE_C';
 
 /* Puntuación */
-";"                                 return 'SEMICOLON';
-":"                                 return 'COLON';
-","                                 return 'COMMA';
-"."                                 return 'DOT';
+";"                                 return 'PUNTO_COMA';
+":"                                 return 'DOS_PUNTOS';
+","                                 return 'COMA';
+"."                                 return 'PUNTO';
 
 /* Identificadores */
-[a-zA-Z_][a-zA-Z0-9_]*             return 'IDENTIFIER';
+[a-zA-Z_][a-zA-Z0-9_]*             return 'IDENTIFICADOR';
 
 /* Fin de archivo */
 <<EOF>>                             return 'EOF';
@@ -135,10 +135,10 @@
 
 %left 'OR'
 %left 'AND'
-%left 'EQ_EQ' 'NOT_EQ'
-%left 'LT' 'LTE' 'GTE' 'GT'
-%left 'PLUS' 'MINUS'
-%left 'TIMES' 'DIV' 'MOD'
+%left 'DOBLE_IGUAL' 'NO_IGUAL'
+%left 'MENOR' 'MENOR_IGUAL' 'MAYOR_IGUAL' 'MAYOR'
+%left 'MAS' 'MENOS'
+%left 'ASTERISCO' 'DIVISION' 'PORCENTAJE'
 %right 'NOT' UMINUS
 
 /* ANALIZADOR SINTÁCTICO */
@@ -172,7 +172,7 @@
 /* ── Programa (raíz del AST) ───────────────────────────────────── */
 programa
     : definiciones_globales EOF
-        { $$ = { type: 'Program', body: $1, loc: loc(@1) }; return $$; }
+        { $$ = { type: 'Programa', cuerpo: $1, ubicacion: loc(@1) }; return $$; }
     ;
 
 definiciones_globales
@@ -191,8 +191,8 @@ definicion_global
 
 /* ── Structs ───────────────────────────────────────────────────── */
 declaracion_struct
-    : STRUCT IDENTIFIER LBRACE campos_struct RBRACE
-        { $$ = { type: 'StructDecl', name: $2, fields: $4, loc: loc(@1) }; }
+    : STRUCT IDENTIFICADOR LLAVE_A campos_struct LLAVE_C
+        { $$ = { type: 'StructDecl', nombre: $2, campos: $4, ubicacion: loc(@1) }; }
     ;
 
 campos_struct
@@ -203,35 +203,35 @@ campos_struct
     ;
 
 campo_struct
-    : tipo IDENTIFIER SEMICOLON
+    : tipo IDENTIFICADOR PUNTO_COMA
         { $$ = { type: 'FieldDecl', dataType: $1, name: $2, loc: loc(@1) }; }
-    | tipo IDENTIFIER
+    | tipo IDENTIFICADOR
         { $$ = { type: 'FieldDecl', dataType: $1, name: $2, loc: loc(@1) }; }
     ;
 
 /* ── Funciones ─────────────────────────────────────────────────── */
 declaracion_funcion
-    : FUNC MAIN LPAREN RPAREN LBRACE sentencias RBRACE
+    : FUNC MAIN PARENTESIS_A PARENTESIS_C LLAVE_A sentencias LLAVE_C
         { $$ = { type: 'MainFunc', body: $6, loc: loc(@1) }; }
-    | FUNC IDENTIFIER LPAREN parametros RPAREN tipo_retorno LBRACE sentencias RBRACE
+    | FUNC IDENTIFICADOR PARENTESIS_A parametros PARENTESIS_C tipo_retorno LLAVE_A sentencias LLAVE_C
         { $$ = { type: 'FuncDecl', name: $2, params: $4, returnType: $6, body: $8, loc: loc(@1) }; }
-    | FUNC IDENTIFIER LPAREN RPAREN tipo_retorno LBRACE sentencias RBRACE
+    | FUNC IDENTIFICADOR PARENTESIS_A PARENTESIS_C tipo_retorno LLAVE_A sentencias LLAVE_C
         { $$ = { type: 'FuncDecl', name: $2, params: [], returnType: $5, body: $7, loc: loc(@1) }; }
-    | FUNC IDENTIFIER LPAREN parametros RPAREN LBRACE sentencias RBRACE
+    | FUNC IDENTIFICADOR PARENTESIS_A parametros PARENTESIS_C LLAVE_A sentencias LLAVE_C
         { $$ = { type: 'FuncDecl', name: $2, params: $4, returnType: null, body: $7, loc: loc(@1) }; }
-    | FUNC IDENTIFIER LPAREN RPAREN LBRACE sentencias RBRACE
+    | FUNC IDENTIFICADOR PARENTESIS_A PARENTESIS_C LLAVE_A sentencias LLAVE_C
         { $$ = { type: 'FuncDecl', name: $2, params: [], returnType: null, body: $6, loc: loc(@1) }; }
     ;
 
 parametros
-    : parametros COMMA parametro
+    : parametros COMA parametro
         { $1.push($3); $$ = $1; }
     | parametro
         { $$ = [$1]; }
     ;
 
 parametro
-    : IDENTIFIER tipo
+    : IDENTIFICADOR tipo
         { $$ = { type: 'Param', name: $1, dataType: $2, loc: loc(@1) }; }
     ;
 
@@ -243,20 +243,20 @@ tipo_retorno
 /* ── Tipos ─────────────────────────────────────────────────────── */
 tipo
     : INT
-        { $$ = { type: 'PrimitiveType', name: 'int' }; }
-    | FLOAT64
-        { $$ = { type: 'PrimitiveType', name: 'float64' }; }
+        { $$ = { type: 'TipoPrimitivo', name: 'int' }; }
+    | FLOAT
+        { $$ = { type: 'TipoPrimitivo', name: 'float' }; }
     | STRING
-        { $$ = { type: 'PrimitiveType', name: 'string' }; }
+        { $$ = { type: 'TipoPrimitivo', name: 'string' }; }
     | BOOL
-        { $$ = { type: 'PrimitiveType', name: 'bool' }; }
+        { $$ = { type: 'TipoPrimitivo', name: 'bool' }; }
     | RUNE
-        { $$ = { type: 'PrimitiveType', name: 'rune' }; }
-    | LBRACKET RBRACKET tipo
+        { $$ = { type: 'TipoPrimitivo', name: 'rune' }; }
+    | CORCHETE_A CORCHETE_C tipo
         { $$ = { type: 'SliceType', elementType: $3 }; }
-    | LBRACKET RBRACKET LBRACKET RBRACKET tipo
+    | CORCHETE_A CORCHETE_C CORCHETE_A CORCHETE_C tipo
         { $$ = { type: 'SliceType', elementType: { type: 'SliceType', elementType: $5 } }; }
-    | IDENTIFIER
+    | IDENTIFICADOR
         { $$ = { type: 'StructType', name: $1 }; }
     ;
 
@@ -293,65 +293,29 @@ sentencia
         { $$ = $1; }
     ;
 
-/* ══════════════════════════════════════════════════════════════════
- *  EJEMPLO 1 – Declaración y Asignación de Variables
- * ══════════════════════════════════════════════════════════════════
- *
- *  Reglas de producción para las 3 formas de declarar una variable
- *  y las 3 formas de asignar un valor a una variable existente.
- *
- *  Forma 1 (explícita con valor):
- *      var <identificador> <Tipo> = <Expresión>
- *      Ejemplo: var edad int = 25
- *
- *  Forma 2 (explícita sin valor – toma valor por defecto):
- *      var <identificador> <Tipo>
- *      Ejemplo: var contador int
- *
- *  Forma 3 (inferencia de tipo con :=):
- *      <identificador> := <Expresión>
- *      Ejemplo: ciudad := "Guatemala"
- *
- *  Asignación:
- *      <identificador> = <Expresión>
- *      Ejemplo: edad = 30
- *
- *  Asignación con operador += :
- *      <identificador> += <Expresión>
- *      Ejemplo: var1 += 10
- *
- *  Asignación con operador -= :
- *      <identificador> -= <Expresión>
- *      Ejemplo: var2 -= 5
- *
- *  Incremento / Decremento:
- *      <identificador>++
- *      <identificador>--
- * ────────────────────────────────────────────────────────────────── */
-
 /* Declaración de variables */
 declaracion_variable
-    : VAR IDENTIFIER tipo EQUALS expresion
+    : VAR IDENTIFICADOR tipo IGUAL expresion
         { $$ = { type: 'VarDecl', name: $2, dataType: $3, value: $5, loc: loc(@1) }; }
-    | VAR IDENTIFIER tipo
+    | VAR IDENTIFICADOR tipo
         { $$ = { type: 'VarDecl', name: $2, dataType: $3, value: null, loc: loc(@1) }; }
-    | IDENTIFIER DECL_SHORT expresion
+    | IDENTIFICADOR DECL_SHORT expresion
         { $$ = { type: 'ShortVarDecl', name: $1, value: $3, loc: loc(@1) }; }
-    | VAR IDENTIFIER LBRACKET RBRACKET tipo
+    | VAR IDENTIFICADOR CORCHETE_A CORCHETE_C tipo
         { $$ = { type: 'VarDecl', name: $2, dataType: { type: 'SliceType', elementType: $5 }, value: null, loc: loc(@1) }; }
-    | IDENTIFIER IDENTIFIER EQUALS LBRACE campos_struct_init RBRACE
+    | IDENTIFICADOR IDENTIFICADOR IGUAL PARENTESIS_A campos_struct_init PARENTESIS_C
         { $$ = { type: 'StructInstance', structName: $1, varName: $2, fields: $5, loc: loc(@1) }; }
     ;
 
 /* Asignación de variables */
 asignacion
-    : IDENTIFIER EQUALS expresion
+    : IDENTIFICADOR IGUAL expresion
         { $$ = { type: 'Assignment', name: $1, value: $3, loc: loc(@1) }; }
-    | IDENTIFIER PLUS_EQ expresion
+    | IDENTIFICADOR MAS_IGUAL expresion
         { $$ = { type: 'CompoundAssign', name: $1, operator: '+=', value: $3, loc: loc(@1) }; }
-    | IDENTIFIER MINUS_EQ expresion
+    | IDENTIFICADOR MENOS_IGUAL expresion
         { $$ = { type: 'CompoundAssign', name: $1, operator: '-=', value: $3, loc: loc(@1) }; }
-    | IDENTIFIER EQUALS llamada_funcion_expr
+    | IDENTIFIER IGUAL llamada_funcion_expr
         { $$ = { type: 'Assignment', name: $1, value: $3, loc: loc(@1) }; }
     | IDENTIFIER LBRACKET expresion RBRACKET EQUALS expresion
         { $$ = { type: 'SliceAssign', name: $1, index: $3, value: $6, loc: loc(@1) }; }
@@ -375,80 +339,19 @@ incremento_decremento
 
 /* Inicialización de campos de struct */
 campos_struct_init
-    : campos_struct_init COMMA campo_struct_init
+    : campos_struct_init COMA campo_struct_init
         { $1.push($3); $$ = $1; }
     | campo_struct_init
         { $$ = [$1]; }
     ;
 
 campo_struct_init
-    : IDENTIFIER COLON expresion
+    : IDENTIFICADOR DOS_PUNTOS expresion
         { $$ = { type: 'FieldInit', name: $1, value: $3, loc: loc(@1) }; }
-    | IDENTIFIER COLON LBRACE campos_struct_init RBRACE
+    | IDENTIFIER DOS_PUNTOS PARENTESIS_A campos_struct_init PARENTESIS_C
         { $$ = { type: 'FieldInit', name: $1, value: { type: 'StructLiteral', fields: $4, loc: loc(@3) }, loc: loc(@1) }; }
     ;
 
-/* ══════════════════════════════════════════════════════════════════
- *  EJEMPLO 2 – Sentencias de Control de Flujo
- * ══════════════════════════════════════════════════════════════════
- *
- *  IF / ELSE IF / ELSE
- *  -------------------
- *  La sentencia if evalúa una condición booleana. Si es verdadera,
- *  ejecuta el bloque asociado. Se puede encadenar con else if y else.
- *
- *  Sintaxis:
- *      if <condición> { <sentencias> }
- *      if <condición> { <sentencias> } else { <sentencias> }
- *      if <condición> { <sentencias> } else if <condición> { ... } else { ... }
- *
- *  La condición puede ir opcionalmente entre paréntesis.
- *  Puede haber cualquier cantidad de else if encadenados.
- *  Pueden anidarse libremente.
- *
- *  Ejemplo:
- *      nota := 85
- *      if nota >= 90 {
- *          fmt.Println("Excelente")
- *      } else if nota >= 70 {
- *          fmt.Println("Aprobado")
- *      } else {
- *          fmt.Println("Reprobado")
- *      }
- *
- *  FOR (3 variantes)
- *  ------------------
- *  Variante 1 – Estilo while:
- *      for <condición> { <sentencias> }
- *      Ejemplo: for i <= 5 { fmt.Println(i); i++ }
- *
- *  Variante 2 – Clásico con init/cond/update:
- *      for <init>; <condición>; <update> { <sentencias> }
- *      Ejemplo: for j := 0; j < 5; j++ { fmt.Println(j) }
- *
- *  Variante 3 – Range sobre slice:
- *      for <idx>, <val> := range <expr> { <sentencias> }
- *      Ejemplo: for idx, val := range numeros { fmt.Println(idx, val) }
- *
- *  SWITCH / CASE
- *  --------------
- *  La sentencia switch evalúa una expresión y ejecuta el case que
- *  coincida. Cada case tiene break implícito. El default es opcional.
- *
- *  Sintaxis:
- *      switch <expresión> {
- *          case <valor>: <sentencias>
- *          ...
- *          default: <sentencias>
- *      }
- *
- *  Ejemplo:
- *      switch dia {
- *      case 1: fmt.Println("Lunes")
- *      case 2: fmt.Println("Martes")
- *      default: fmt.Println("Otro día")
- *      }
- * ────────────────────────────────────────────────────────────────── */
 
 /* Sentencia IF / ELSE IF / ELSE */
 sentencia_if
