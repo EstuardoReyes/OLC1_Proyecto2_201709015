@@ -1,22 +1,18 @@
 /* GoScript – Gramática Jison (Léxico + Sintáctico) */
 
-%{
-    // Utilidades para construir nodos del AST
-    function loc(l) {
-        return { line: l.first_line, column: l.first_column };
-    }
-%}
-
-/* ANALIZADOR LEXICO */
+/* ══════════════════════════════════════════════════════════════════
+   ANALIZADOR LÉXICO
+   ══════════════════════════════════════════════════════════════════ */
 %lex
+%%
 
 /* Espacios en blanco y saltos de línea */
 [ \t]+                              /* ignorar espacios y tabs */
-\r\n|\r|\n                           /* salto de línea */
+\r\n|\r|\n                          /* salto de línea */
 
 /* Comentarios */
-\/\/.*                               /* comentario de una línea */
-\/\*[\s\S]*?\*\/                     /* comentario multilínea */
+\/\/.*                              /* comentario de una línea */
+\/\*[\s\S]*?\*\/                    /* comentario multilínea */
 
 /* Palabras reservadas */
 "int"                               return 'INT';
@@ -68,13 +64,13 @@
 [0-9]+\.[0-9]+                      return 'LIT_FLOAT';
 [0-9]+                              return 'LIT_INT';
 \"([^\"\\]|\\.)*\"                  return 'LIT_STRING';
-\'([^\'\\]|\\.)\'                   return 'LIT_RUNE';
+\'([^\'\\]|\\.){1}\'                return 'LIT_RUNE';
 
-/* Operadores aritméticos de asignación */
+/* Operadores de asignación compuesta*/
 "+="                                return 'MAS_IGUAL';
 "-="                                return 'MENOS_IGUAL';
 
-/* Operadores de comparación */
+/* Operadores de comparación — multi-char ANTES que single-char */
 "=="                                return 'DOBLE_IGUAL';
 "!="                                return 'NO_IGUAL';
 ">="                                return 'MAYOR_IGUAL';
@@ -101,7 +97,7 @@
 "/"                                 return 'DIVISION';
 "%"                                 return 'PORCENTAJE';
 
-/* Asignación */
+/* Asignación simple */
 "="                                 return 'IGUAL';
 
 /* Delimitadores */
@@ -118,68 +114,66 @@
 ","                                 return 'COMA';
 "."                                 return 'PUNTO';
 
-/* Identificadores */
+/* Identificadores — al final, después de todas las keywords */
 [a-zA-Z_][a-zA-Z0-9_]*             return 'IDENTIFICADOR';
 
 /* Fin de archivo */
 <<EOF>>                             return 'EOF';
 
-/* Error léxico */
+/* Error léxico — descarta el carácter y continúa */
 .   {
-        console.error('Error léxico: símbolo no reconocido "' + yytext + '" en línea ' + yylloc.first_line + ', columna ' + yylloc.first_column);
+        console.error(
+            'Error léxico: símbolo no reconocido "' + yytext +
+            '" en línea ' + yylloc.first_line +
+            ', columna ' + yylloc.first_column
+        );
     }
 
 /lex
 
-/* PRECEDENCIA Y ASOCIATIVIDAD DE OPERADORES */
+/* ══════════════════════════════════════════════════════════════════
+   CÓDIGO AUXILIAR (disponible en toda la gramática)
+   ══════════════════════════════════════════════════════════════════ */
+%{
+    /**
+     * Construye un objeto de ubicación con línea y columna.
+     * Se usa en cada nodo del AST: ubicacion: loc(@1)
+     * @param {object} l - objeto de posición de Jison (@N)
+     */
+    function loc(l) {
+        return {
+            linea:   l.first_line,
+            columna: l.first_column
+        };
+    }
+%}
 
-%left 'OR'
-%left 'AND'
-%left 'DOBLE_IGUAL' 'NO_IGUAL'
-%left 'MENOR' 'MENOR_IGUAL' 'MAYOR_IGUAL' 'MAYOR'
-%left 'MAS' 'MENOS'
-%left 'ASTERISCO' 'DIVISION' 'PORCENTAJE'
-%right 'NOT' UMINUS
+%start programa
+
+/*  PRECEDENCIA Y ASOCIATIVIDAD DE OPERADORES  */
+%left     'OR'
+%left     'AND'
+%left     'DOBLE_IGUAL' 'NO_IGUAL'
+%left     'MENOR' 'MENOR_IGUAL' 'MAYOR' 'MAYOR_IGUAL'
+%left     'MAS' 'MENOS'
+%left     'ASTERISCO' 'DIVISION' 'PORCENTAJE'
+%right    'NOT' UMINUS
 
 /* ANALIZADOR SINTÁCTICO */
 %%
 
-/* ================================================================
- *  EJEMPLO 1 – Declaración de variables
- *  -----------------------------------------------------------------
- *  Cubre las 3 formas de declarar variables en GoScript:
- *    1. var <id> <tipo> = <expr>
- *    2. var <id> <tipo>
- *    3. <id> := <expr>
- *  También cubre la asignación simple: <id> = <expr>
- *  Y los operadores de asignación:   <id> += <expr>  /  <id> -= <expr>
- *  Además del incremento/decremento:  <id>++  /  <id>--
- * ================================================================ */
-
-/* ================================================================
- *  EJEMPLO 2 – Sentencias de control de flujo (if / else / for)
- *  -----------------------------------------------------------------
- *  Cubre:
- *    - if <cond> { ... }
- *    - if <cond> { ... } else { ... }
- *    - if <cond> { ... } else if <cond> { ... } else { ... }
- *    - for <cond> { ... }                          (estilo while)
- *    - for <init> ; <cond> ; <update> { ... }      (clásico)
- *    - for <idx>, <val> := range <expr> { ... }    (range)
- *    - switch <expr> { case <val>: ... default: ... }
- * ================================================================ */
-
-/* ── Programa (raíz del AST) ───────────────────────────────────── */
+/* ── Programa (raíz del AST) ────────────────────────────────────── */
 programa
     : definiciones_globales EOF
         { $$ = { type: 'Programa', cuerpo: $1, ubicacion: loc(@1) }; return $$; }
     ;
 
+/* Lista de definiciones globales (funciones y structs) */
 definiciones_globales
     : definiciones_globales definicion_global
-        { $1.push($2); $$ = $1; }
+        { $1.push($2); $$ = $1; }             /* caso recursivo: agrega al arreglo */
     | definicion_global
-        { $$ = [$1]; }
+        { $$ = [$1]; }                         /* caso base: primer elemento */
     ;
 
 definicion_global
@@ -189,7 +183,8 @@ definicion_global
         { $$ = $1; }
     ;
 
-/* ── Structs ───────────────────────────────────────────────────── */
+
+/* ── Structs ─────────────────────────────────────────────────────── */
 declaracion_struct
     : STRUCT IDENTIFICADOR LLAVE_A campos_struct LLAVE_C
         { $$ = { type: 'StructDecl', nombre: $2, campos: $4, ubicacion: loc(@1) }; }
@@ -202,25 +197,34 @@ campos_struct
         { $$ = [$1]; }
     ;
 
+/* Cada campo lleva tipo y luego nombre (orden del spec GoScript) */
 campo_struct
     : tipo IDENTIFICADOR PUNTO_COMA
-        { $$ = { type: 'FieldDecl', dataType: $1, name: $2, loc: loc(@1) }; }
-    | tipo IDENTIFICADOR
-        { $$ = { type: 'FieldDecl', dataType: $1, name: $2, loc: loc(@1) }; }
+        { $$ = { type: 'FieldDecl', tipo: $1, nombre: $2, ubicacion: loc(@1) }; }
     ;
 
-/* ── Funciones ─────────────────────────────────────────────────── */
+
+/* ── Funciones ───────────────────────────────────────────────────── */
 declaracion_funcion
+    /* func main() { ... } */
     : FUNC MAIN PARENTESIS_A PARENTESIS_C LLAVE_A sentencias LLAVE_C
-        { $$ = { type: 'MainFunc', body: $6, loc: loc(@1) }; }
+        { $$ = { type: 'MainFunc', cuerpo: $6, ubicacion: loc(@1) }; }
+
+    /* func nombre(params) tipoRetorno { ... } */
     | FUNC IDENTIFICADOR PARENTESIS_A parametros PARENTESIS_C tipo_retorno LLAVE_A sentencias LLAVE_C
-        { $$ = { type: 'FuncDecl', name: $2, params: $4, returnType: $6, body: $8, loc: loc(@1) }; }
+        { $$ = { type: 'FuncDecl', nombre: $2, parametros: $4, tipo_retorno: $6, cuerpo: $8, ubicacion: loc(@1) }; }
+
+    /* func nombre() tipoRetorno { ... } */
     | FUNC IDENTIFICADOR PARENTESIS_A PARENTESIS_C tipo_retorno LLAVE_A sentencias LLAVE_C
-        { $$ = { type: 'FuncDecl', name: $2, params: [], returnType: $5, body: $7, loc: loc(@1) }; }
+        { $$ = { type: 'FuncDecl', nombre: $2, parametros: [], tipo_retorno: $5, cuerpo: $7, ubicacion: loc(@1) }; }
+
+    /* func nombre(params) { ... }  — void */
     | FUNC IDENTIFICADOR PARENTESIS_A parametros PARENTESIS_C LLAVE_A sentencias LLAVE_C
-        { $$ = { type: 'FuncDecl', name: $2, params: $4, returnType: null, body: $7, loc: loc(@1) }; }
+        { $$ = { type: 'FuncDecl', nombre: $2, parametros: $4, tipo_retorno: null, cuerpo: $7, ubicacion: loc(@1) }; }
+
+    /* func nombre() { ... }  — void sin parámetros */
     | FUNC IDENTIFICADOR PARENTESIS_A PARENTESIS_C LLAVE_A sentencias LLAVE_C
-        { $$ = { type: 'FuncDecl', name: $2, params: [], returnType: null, body: $6, loc: loc(@1) }; }
+        { $$ = { type: 'FuncDecl', nombre: $2, parametros: [], tipo_retorno: null, cuerpo: $6, ubicacion: loc(@1) }; }
     ;
 
 parametros
@@ -232,7 +236,7 @@ parametros
 
 parametro
     : IDENTIFICADOR tipo
-        { $$ = { type: 'Param', name: $1, dataType: $2, loc: loc(@1) }; }
+        { $$ = { type: 'Param', nombre: $1, tipo: $2, ubicacion: loc(@1) }; }
     ;
 
 tipo_retorno
@@ -240,27 +244,29 @@ tipo_retorno
         { $$ = $1; }
     ;
 
-/* ── Tipos ─────────────────────────────────────────────────────── */
+
+/* ── Tipos ───────────────────────────────────────────────────────── */
 tipo
     : INT
-        { $$ = { type: 'TipoPrimitivo', name: 'int' }; }
+        { $$ = { type: 'TipoPrimitivo', nombre: 'int' }; }
     | FLOAT
-        { $$ = { type: 'TipoPrimitivo', name: 'float' }; }
+        { $$ = { type: 'TipoPrimitivo', nombre: 'float64' }; }
     | STRING
-        { $$ = { type: 'TipoPrimitivo', name: 'string' }; }
+        { $$ = { type: 'TipoPrimitivo', nombre: 'string' }; }
     | BOOL
-        { $$ = { type: 'TipoPrimitivo', name: 'bool' }; }
+        { $$ = { type: 'TipoPrimitivo', nombre: 'bool' }; }
     | RUNE
-        { $$ = { type: 'TipoPrimitivo', name: 'rune' }; }
+        { $$ = { type: 'TipoPrimitivo', nombre: 'rune' }; }
     | CORCHETE_A CORCHETE_C tipo
-        { $$ = { type: 'SliceType', elementType: $3 }; }
+        { $$ = { type: 'TipoSlice', tipo: $3 }; }
     | CORCHETE_A CORCHETE_C CORCHETE_A CORCHETE_C tipo
-        { $$ = { type: 'SliceType', elementType: { type: 'SliceType', elementType: $5 } }; }
+        { $$ = { type: 'TipoSlice', tipo: { type: 'TipoSlice', tipo: $5 } }; }
     | IDENTIFICADOR
-        { $$ = { type: 'StructType', name: $1 }; }
+        { $$ = { type: 'TipoStruct', nombre: $1 }; }
     ;
 
-/* ── Bloque de sentencias ──────────────────────────────────────── */
+
+/* ── Bloque de sentencias ────────────────────────────────────────── */
 sentencias
     : sentencias sentencia
         { $1.push($2); $$ = $1; }
@@ -269,75 +275,86 @@ sentencias
     ;
 
 sentencia
-    : declaracion_variable
-        { $$ = $1; }
-    | asignacion
-        { $$ = $1; }
-    | llamada_funcion
-        { $$ = $1; }
-    | sentencia_if
-        { $$ = $1; }
-    | sentencia_switch
-        { $$ = $1; }
-    | sentencia_for
-        { $$ = $1; }
-    | sentencia_break
-        { $$ = $1; }
-    | sentencia_continue
-        { $$ = $1; }
-    | sentencia_return
-        { $$ = $1; }
-    | bloque_independiente
-        { $$ = $1; }
-    | incremento_decremento
-        { $$ = $1; }
+    : declaracion_variable    { $$ = $1; }
+    | asignacion              { $$ = $1; }
+    | llamada_funcion         { $$ = $1; }
+    | sentencia_if            { $$ = $1; }
+    | sentencia_switch        { $$ = $1; }
+    | sentencia_for           { $$ = $1; }
+    | sentencia_break         { $$ = $1; }
+    | sentencia_continue      { $$ = $1; }
+    | sentencia_return        { $$ = $1; }
+    | bloque_independiente    { $$ = $1; }
+    | incremento_decremento   { $$ = $1; }
     ;
 
-/* Declaración de variables */
+
+/* ── Declaración de variables ────────────────────────────────────── */
 declaracion_variable
+    /* var x int = 5 */
     : VAR IDENTIFICADOR tipo IGUAL expresion
-        { $$ = { type: 'VarDecl', name: $2, dataType: $3, value: $5, loc: loc(@1) }; }
+        { $$ = { type: 'VarDecl', nombre: $2, tipo: $3, valor: $5, ubicacion: loc(@1) }; }
+
+    /* var x int  — sin valor inicial */
     | VAR IDENTIFICADOR tipo
-        { $$ = { type: 'VarDecl', name: $2, dataType: $3, value: null, loc: loc(@1) }; }
+        { $$ = { type: 'VarDecl', nombre: $2, tipo: $3, valor: null, ubicacion: loc(@1) }; }
+
+    /* x := expresion */
     | IDENTIFICADOR DECL_SHORT expresion
-        { $$ = { type: 'ShortVarDecl', name: $1, value: $3, loc: loc(@1) }; }
+        { $$ = { type: 'ShortVarDecl', nombre: $1, valor: $3, ubicacion: loc(@1) }; }
+
+    /* var x []int  — slice sin valor inicial */
     | VAR IDENTIFICADOR CORCHETE_A CORCHETE_C tipo
-        { $$ = { type: 'VarDecl', name: $2, dataType: { type: 'SliceType', elementType: $5 }, value: null, loc: loc(@1) }; }
+        { $$ = { type: 'VarDecl', nombre: $2, tipo: { type: 'TipoSlice', tipo: $5 }, valor: null, ubicacion: loc(@1) }; }
+
+    /* Persona p = (nombre: "Juan", edad: 20) */
     | IDENTIFICADOR IDENTIFICADOR IGUAL PARENTESIS_A campos_struct_init PARENTESIS_C
-        { $$ = { type: 'StructInstance', structName: $1, varName: $2, fields: $5, loc: loc(@1) }; }
+        { $$ = { type: 'StructInstance', tipoStruct: $1, nombre: $2, campos: $5, ubicacion: loc(@1) }; }
     ;
 
-/* Asignación de variables */
+
+/* ── Asignación de variables ─────────────────────────────────────── */
 asignacion
+    /* x = expresion */
     : IDENTIFICADOR IGUAL expresion
-        { $$ = { type: 'Assignment', name: $1, value: $3, loc: loc(@1) }; }
+        { $$ = { type: 'Assignment', nombre: $1, valor: $3, ubicacion: loc(@1) }; }
+
+    /* x += expresion */
     | IDENTIFICADOR MAS_IGUAL expresion
-        { $$ = { type: 'CompoundAssign', name: $1, operator: '+=', value: $3, loc: loc(@1) }; }
+        { $$ = { type: 'CompoundAssign', nombre: $1, operador: '+=', valor: $3, ubicacion: loc(@1) }; }
+
+    /* x -= expresion */
     | IDENTIFICADOR MENOS_IGUAL expresion
-        { $$ = { type: 'CompoundAssign', name: $1, operator: '-=', value: $3, loc: loc(@1) }; }
-    | IDENTIFIER IGUAL llamada_funcion_expr
-        { $$ = { type: 'Assignment', name: $1, value: $3, loc: loc(@1) }; }
-    | IDENTIFIER LBRACKET expresion RBRACKET EQUALS expresion
-        { $$ = { type: 'SliceAssign', name: $1, index: $3, value: $6, loc: loc(@1) }; }
-    | IDENTIFIER LBRACKET expresion RBRACKET LBRACKET expresion RBRACKET EQUALS expresion
-        { $$ = { type: 'MatrixAssign', name: $1, row: $3, col: $6, value: $9, loc: loc(@1) }; }
-    | acceso_atributo EQUALS expresion
-        { $$ = { type: 'AttrAssign', target: $1, value: $3, loc: loc(@1) }; }
-    | IDENTIFIER EQUALS APPEND LPAREN IDENTIFIER COMMA expresion RPAREN
-        { $$ = { type: 'AppendAssign', target: $1, slice: $5, value: $7, loc: loc(@1) }; }
-    | IDENTIFIER EQUALS APPEND LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN
-        { $$ = { type: 'AppendAssign', target: $1, slice: $5, value: { type: 'Identifier', name: $7, loc: loc(@7) }, loc: loc(@1) }; }
+        { $$ = { type: 'CompoundAssign', nombre: $1, operador: '-=', valor: $3, ubicacion: loc(@1) }; }
+
+    /* slice[i] = expresion */
+    | IDENTIFICADOR CORCHETE_A expresion CORCHETE_C IGUAL expresion
+        { $$ = { type: 'SliceAssign', nombre: $1, indice: $3, valor: $6, ubicacion: loc(@1) }; }
+
+    /* matriz[i][j] = expresion */
+    | IDENTIFICADOR CORCHETE_A expresion CORCHETE_C CORCHETE_A expresion CORCHETE_C IGUAL expresion
+        { $$ = { type: 'MatrixAssign', nombre: $1, fila: $3, columna: $6, valor: $9, ubicacion: loc(@1) }; }
+
+    /* obj.attr = expresion */
+    | acceso_atributo IGUAL expresion
+        { $$ = { type: 'AttrAssign', target: $1, valor: $3, ubicacion: loc(@1) }; }
+
+    /* x = append(slice, expresion) */
+    | IDENTIFICADOR IGUAL APPEND PARENTESIS_A IDENTIFICADOR COMA expresion PARENTESIS_C
+        { $$ = { type: 'AppendAssign', target: $1, slice: $5, valor: $7, ubicacion: loc(@1) }; }
     ;
 
-/* Incremento y decremento */
+
+/* ── Incremento y decremento ─────────────────────────────────────── */
 incremento_decremento
-    : IDENTIFIER PLUS_PLUS
-        { $$ = { type: 'Increment', name: $1, loc: loc(@1) }; }
-    | IDENTIFIER MINUS_MINUS
-        { $$ = { type: 'Decrement', name: $1, loc: loc(@1) }; }
+    : IDENTIFICADOR INCREMENTO
+        { $$ = { type: 'Increment', nombre: $1, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR DECREMENTO
+        { $$ = { type: 'Decrement', nombre: $1, ubicacion: loc(@1) }; }
     ;
 
-/* Inicialización de campos de struct */
+
+/* ── Inicialización de campos de struct ──────────────────────────── */
 campos_struct_init
     : campos_struct_init COMA campo_struct_init
         { $1.push($3); $$ = $1; }
@@ -346,33 +363,48 @@ campos_struct_init
     ;
 
 campo_struct_init
+    /* nombre: expresion */
     : IDENTIFICADOR DOS_PUNTOS expresion
-        { $$ = { type: 'FieldInit', name: $1, value: $3, loc: loc(@1) }; }
-    | IDENTIFIER DOS_PUNTOS PARENTESIS_A campos_struct_init PARENTESIS_C
-        { $$ = { type: 'FieldInit', name: $1, value: { type: 'StructLiteral', fields: $4, loc: loc(@3) }, loc: loc(@1) }; }
+        { $$ = { type: 'FieldInit', nombre: $1, valor: $3, ubicacion: loc(@1) }; }
+
+    /* nombre: (campos_anidados)  — struct anidado */
+    | IDENTIFICADOR DOS_PUNTOS PARENTESIS_A campos_struct_init PARENTESIS_C
+        { $$ = { type: 'FieldInit', nombre: $1, valor: { type: 'StructLiteral', campos: $4, ubicacion: loc(@3) }, ubicacion: loc(@1) }; }
     ;
 
 
-/* Sentencia IF / ELSE IF / ELSE */
+/* ── Sentencia IF / ELSE IF / ELSE ───────────────────────────────── */
 sentencia_if
-    : IF expresion LBRACE sentencias RBRACE
-        { $$ = { type: 'IfStmt', condition: $2, body: $4, elseBody: null, loc: loc(@1) }; }
-    | IF expresion LBRACE sentencias RBRACE ELSE LBRACE sentencias RBRACE
-        { $$ = { type: 'IfStmt', condition: $2, body: $4, elseBody: $8, loc: loc(@1) }; }
-    | IF expresion LBRACE sentencias RBRACE ELSE sentencia_if
-        { $$ = { type: 'IfStmt', condition: $2, body: $4, elseBody: [$7], loc: loc(@1) }; }
-    | IF LPAREN expresion RPAREN LBRACE sentencias RBRACE
-        { $$ = { type: 'IfStmt', condition: $3, body: $6, elseBody: null, loc: loc(@1) }; }
-    | IF LPAREN expresion RPAREN LBRACE sentencias RBRACE ELSE LBRACE sentencias RBRACE
-        { $$ = { type: 'IfStmt', condition: $3, body: $6, elseBody: $10, loc: loc(@1) }; }
-    | IF LPAREN expresion RPAREN LBRACE sentencias RBRACE ELSE sentencia_if
-        { $$ = { type: 'IfStmt', condition: $3, body: $6, elseBody: [$9], loc: loc(@1) }; }
+    /* if condicion { ... } */
+    : IF expresion LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'IfStmt', condicion: $2, cuerpo: $4, cuerpo_else: null, ubicacion: loc(@1) }; }
+
+    /* if condicion { ... } else { ... } */
+    | IF expresion LLAVE_A sentencias LLAVE_C ELSE LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'IfStmt', condicion: $2, cuerpo: $4, cuerpo_else: $8, ubicacion: loc(@1) }; }
+
+    /* if condicion { ... } else if ... */
+    | IF expresion LLAVE_A sentencias LLAVE_C ELSE sentencia_if
+        { $$ = { type: 'IfStmt', condicion: $2, cuerpo: $4, cuerpo_else: [$7], ubicacion: loc(@1) }; }
+
+    /* if (condicion) { ... }  — con paréntesis opcionales */
+    | IF PARENTESIS_A expresion PARENTESIS_C LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'IfStmt', condicion: $3, cuerpo: $6, cuerpo_else: null, ubicacion: loc(@1) }; }
+
+    /* if (condicion) { ... } else { ... } */
+    | IF PARENTESIS_A expresion PARENTESIS_C LLAVE_A sentencias LLAVE_C ELSE LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'IfStmt', condicion: $3, cuerpo: $6, cuerpo_else: $10, ubicacion: loc(@1) }; }
+
+    /* if (condicion) { ... } else if ... */
+    | IF PARENTESIS_A expresion PARENTESIS_C LLAVE_A sentencias LLAVE_C ELSE sentencia_if
+        { $$ = { type: 'IfStmt', condicion: $3, cuerpo: $6, cuerpo_else: [$9], ubicacion: loc(@1) }; }
     ;
 
-/* Sentencia SWITCH / CASE */
+
+/* ── Sentencia SWITCH ────────────────────────────────────────────── */
 sentencia_switch
-    : SWITCH expresion LBRACE casos_switch RBRACE
-        { $$ = { type: 'SwitchStmt', discriminant: $2, cases: $4, loc: loc(@1) }; }
+    : SWITCH expresion LLAVE_A casos_switch LLAVE_C
+        { $$ = { type: 'SwitchStmt', discriminante: $2, casos: $4, ubicacion: loc(@1) }; }
     ;
 
 casos_switch
@@ -383,214 +415,252 @@ casos_switch
     ;
 
 caso_switch
-    : CASE expresion COLON sentencias
-        { $$ = { type: 'CaseClause', test: $2, body: $4, loc: loc(@1) }; }
-    | DEFAULT COLON sentencias
-        { $$ = { type: 'DefaultClause', body: $3, loc: loc(@1) }; }
+    : CASE expresion DOS_PUNTOS sentencias
+        { $$ = { type: 'CaseClause', condicion: $2, cuerpo: $4, ubicacion: loc(@1) }; }
+    | DEFAULT DOS_PUNTOS sentencias
+        { $$ = { type: 'DefaultClause', cuerpo: $3, ubicacion: loc(@1) }; }
     ;
 
-/* Sentencia FOR */
+
+/* ── Sentencia FOR ───────────────────────────────────────────────── */
 sentencia_for
-    : FOR expresion LBRACE sentencias RBRACE
-        { $$ = { type: 'ForWhile', condition: $2, body: $4, loc: loc(@1) }; }
-    | FOR for_init SEMICOLON expresion SEMICOLON for_update LBRACE sentencias RBRACE
-        { $$ = { type: 'ForClassic', init: $2, condition: $4, update: $6, body: $8, loc: loc(@1) }; }
-    | FOR IDENTIFIER COMMA IDENTIFIER DECL_SHORT RANGE expresion LBRACE sentencias RBRACE
-        { $$ = { type: 'ForRange', index: $2, value: $4, iterable: $7, body: $9, loc: loc(@1) }; }
-    | FOR IDENTIFIER COMMA IDENTIFIER DECL_SHORT RANGE IDENTIFIER LBRACE sentencias RBRACE
-        { $$ = { type: 'ForRange', index: $2, value: $4, iterable: { type: 'Identifier', name: $7, loc: loc(@7) }, body: $9, loc: loc(@1) }; }
+    /* for condicion { ... }  — estilo while */
+    : FOR expresion LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'ForWhile', condicion: $2, cuerpo: $4, ubicacion: loc(@1) }; }
+
+    /* for init; condicion; update { ... }  — clásico */
+    | FOR for_init PUNTO_COMA expresion PUNTO_COMA for_update LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'ForClassic', inicializacion: $2, condicion: $4, actualizacion: $6, cuerpo: $8, ubicacion: loc(@1) }; }
+
+    /* for i, v := range expresion { ... } */
+    | FOR IDENTIFICADOR COMA IDENTIFICADOR DECL_SHORT RANGE expresion LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'ForRange', indice: $2, valor: $4, iterable: $7, cuerpo: $9, ubicacion: loc(@1) }; }
+
+    /* for i, v := range identificador { ... } */
+    | FOR IDENTIFICADOR COMA IDENTIFICADOR DECL_SHORT RANGE IDENTIFICADOR LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'ForRange', indice: $2, valor: $4, iterable: { type: 'Identifier', nombre: $7, ubicacion: loc(@7) }, cuerpo: $9, ubicacion: loc(@1) }; }
     ;
 
 for_init
-    : IDENTIFIER DECL_SHORT expresion
-        { $$ = { type: 'ShortVarDecl', name: $1, value: $3, loc: loc(@1) }; }
-    | VAR IDENTIFIER tipo EQUALS expresion
-        { $$ = { type: 'VarDecl', name: $2, dataType: $3, value: $5, loc: loc(@1) }; }
-    | IDENTIFIER EQUALS expresion
-        { $$ = { type: 'Assignment', name: $1, value: $3, loc: loc(@1) }; }
+    : IDENTIFICADOR DECL_SHORT expresion
+        { $$ = { type: 'ShortVarDecl', nombre: $1, valor: $3, ubicacion: loc(@1) }; }
+    | VAR IDENTIFICADOR tipo IGUAL expresion
+        { $$ = { type: 'VarDecl', nombre: $2, tipo: $3, valor: $5, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR IGUAL expresion
+        { $$ = { type: 'Assignment', nombre: $1, valor: $3, ubicacion: loc(@1) }; }
     ;
 
 for_update
-    : IDENTIFIER PLUS_PLUS
-        { $$ = { type: 'Increment', name: $1, loc: loc(@1) }; }
-    | IDENTIFIER MINUS_MINUS
-        { $$ = { type: 'Decrement', name: $1, loc: loc(@1) }; }
-    | IDENTIFIER PLUS_EQ expresion
-        { $$ = { type: 'CompoundAssign', name: $1, operator: '+=', value: $3, loc: loc(@1) }; }
-    | IDENTIFIER MINUS_EQ expresion
-        { $$ = { type: 'CompoundAssign', name: $1, operator: '-=', value: $3, loc: loc(@1) }; }
-    | IDENTIFIER EQUALS expresion
-        { $$ = { type: 'Assignment', name: $1, value: $3, loc: loc(@1) }; }
+    : IDENTIFICADOR INCREMENTO
+        { $$ = { type: 'Increment', nombre: $1, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR DECREMENTO
+        { $$ = { type: 'Decrement', nombre: $1, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR MAS_IGUAL expresion
+        { $$ = { type: 'CompoundAssign', nombre: $1, operador: '+=', valor: $3, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR MENOS_IGUAL expresion
+        { $$ = { type: 'CompoundAssign', nombre: $1, operador: '-=', valor: $3, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR IGUAL expresion
+        { $$ = { type: 'Assignment', nombre: $1, valor: $3, ubicacion: loc(@1) }; }
     ;
 
-/* ── Sentencias de transferencia ───────────────────────────────── */
+
+/* ── Sentencias de transferencia ─────────────────────────────────── */
 sentencia_break
     : BREAK
-        { $$ = { type: 'BreakStmt', loc: loc(@1) }; }
+        { $$ = { type: 'BreakStmt', ubicacion: loc(@1) }; }
     ;
 
 sentencia_continue
     : CONTINUE
-        { $$ = { type: 'ContinueStmt', loc: loc(@1) }; }
+        { $$ = { type: 'ContinueStmt', ubicacion: loc(@1) }; }
     ;
 
 sentencia_return
     : RETURN expresion
-        { $$ = { type: 'ReturnStmt', value: $2, loc: loc(@1) }; }
+        { $$ = { type: 'ReturnStmt', valor: $2, ubicacion: loc(@1) }; }
     | RETURN
-        { $$ = { type: 'ReturnStmt', value: null, loc: loc(@1) }; }
+        { $$ = { type: 'ReturnStmt', valor: null, ubicacion: loc(@1) }; }
     ;
 
-/* ── Bloque independiente (scope) ──────────────────────────────── */
+
+/* ── Bloque independiente (crea nuevo scope) ─────────────────────── */
 bloque_independiente
-    : LBRACE sentencias RBRACE
-        { $$ = { type: 'Block', body: $2, loc: loc(@1) }; }
+    : LLAVE_A sentencias LLAVE_C
+        { $$ = { type: 'Block', cuerpo: $2, ubicacion: loc(@1) }; }
     ;
 
-/* ── Llamadas a funciones (como sentencia) ─────────────────────── */
+
+/* ── Llamadas a funciones como sentencia ─────────────────────────── */
 llamada_funcion
-    : FMT DOT PRINTLN LPAREN argumentos RPAREN
-        { $$ = { type: 'PrintlnCall', args: $5, loc: loc(@1) }; }
-    | FMT DOT PRINTLN LPAREN RPAREN
-        { $$ = { type: 'PrintlnCall', args: [], loc: loc(@1) }; }
-    | IDENTIFIER LPAREN argumentos RPAREN
-        { $$ = { type: 'FuncCall', name: $1, args: $3, loc: loc(@1) }; }
-    | IDENTIFIER LPAREN RPAREN
-        { $$ = { type: 'FuncCall', name: $1, args: [], loc: loc(@1) }; }
+    /* fmt.Println(args) */
+    : FMT PUNTO PRINTLN PARENTESIS_A argumentos PARENTESIS_C
+        { $$ = { type: 'PrintlnCall', args: $5, ubicacion: loc(@1) }; }
+
+    /* fmt.Println() — sin argumentos */
+    | FMT PUNTO PRINTLN PARENTESIS_A PARENTESIS_C
+        { $$ = { type: 'PrintlnCall', args: [], ubicacion: loc(@1) }; }
+
+    /* nombre(args) */
+    | IDENTIFICADOR PARENTESIS_A argumentos PARENTESIS_C
+        { $$ = { type: 'FuncCall', nombre: $1, args: $3, ubicacion: loc(@1) }; }
+
+    /* nombre() — sin argumentos */
+    | IDENTIFICADOR PARENTESIS_A PARENTESIS_C
+        { $$ = { type: 'FuncCall', nombre: $1, args: [], ubicacion: loc(@1) }; }
     ;
 
-/* ── Llamadas a funciones (como expresión) ─────────────────────── */
+
+/* ── Llamadas a funciones como expresión ─────────────────────────── */
 llamada_funcion_expr
-    : IDENTIFIER LPAREN argumentos RPAREN
-        { $$ = { type: 'FuncCallExpr', name: $1, args: $3, loc: loc(@1) }; }
-    | IDENTIFIER LPAREN RPAREN
-        { $$ = { type: 'FuncCallExpr', name: $1, args: [], loc: loc(@1) }; }
-    | FMT DOT PRINTLN LPAREN argumentos RPAREN
-        { $$ = { type: 'PrintlnCallExpr', args: $5, loc: loc(@1) }; }
-    | STRCONV DOT ATOI LPAREN expresion RPAREN
-        { $$ = { type: 'AtoiCall', arg: $5, loc: loc(@1) }; }
-    | STRCONV DOT PARSEFLOAT LPAREN expresion RPAREN
-        { $$ = { type: 'ParseFloatCall', arg: $5, loc: loc(@1) }; }
-    | REFLECT DOT TYPEOF LPAREN expresion RPAREN
-        { $$ = { type: 'TypeOfCall', arg: $5, loc: loc(@1) }; }
-    | LEN LPAREN expresion RPAREN
-        { $$ = { type: 'LenCall', arg: $3, loc: loc(@1) }; }
-    | APPEND LPAREN IDENTIFIER COMMA expresion RPAREN
-        { $$ = { type: 'AppendCall', slice: $3, value: $5, loc: loc(@1) }; }
-    | SLICES DOT INDEX LPAREN IDENTIFIER COMMA expresion RPAREN
-        { $$ = { type: 'SlicesIndexCall', slice: $5, value: $7, loc: loc(@1) }; }
-    | STRINGS DOT JOIN LPAREN IDENTIFIER COMMA expresion RPAREN
-        { $$ = { type: 'StringsJoinCall', slice: $5, separator: $7, loc: loc(@1) }; }
+    : IDENTIFICADOR PARENTESIS_A argumentos PARENTESIS_C
+        { $$ = { type: 'FuncCallExpr', nombre: $1, args: $3, ubicacion: loc(@1) }; }
+    | IDENTIFICADOR PARENTESIS_A PARENTESIS_C
+        { $$ = { type: 'FuncCallExpr', nombre: $1, args: [], ubicacion: loc(@1) }; }
+    | FMT PUNTO PRINTLN PARENTESIS_A argumentos PARENTESIS_C
+        { $$ = { type: 'PrintlnCallExpr', args: $5, ubicacion: loc(@1) }; }
+    | STRCONV PUNTO ATOI PARENTESIS_A expresion PARENTESIS_C
+        { $$ = { type: 'AtoiCall', arg: $5, ubicacion: loc(@1) }; }
+    | STRCONV PUNTO PARSEFLOAT PARENTESIS_A expresion PARENTESIS_C
+        { $$ = { type: 'ParseFloatCall', arg: $5, ubicacion: loc(@1) }; }
+    | REFLECT PUNTO TYPEOF PARENTESIS_A expresion PARENTESIS_C
+        { $$ = { type: 'TypeOfCall', arg: $5, ubicacion: loc(@1) }; }
+    | LEN PARENTESIS_A expresion PARENTESIS_C
+        { $$ = { type: 'LenCall', arg: $3, ubicacion: loc(@1) }; }
+    | APPEND PARENTESIS_A IDENTIFICADOR COMA expresion PARENTESIS_C
+        { $$ = { type: 'AppendCall', slice: $3, valor: $5, ubicacion: loc(@1) }; }
+    | SLICES PUNTO INDEX PARENTESIS_A IDENTIFICADOR COMA expresion PARENTESIS_C
+        { $$ = { type: 'SlicesIndexCall', slice: $5, valor: $7, ubicacion: loc(@1) }; }
+    | STRINGS PUNTO JOIN PARENTESIS_A IDENTIFICADOR COMA expresion PARENTESIS_C
+        { $$ = { type: 'StringsJoinCall', slice: $5, separador: $7, ubicacion: loc(@1) }; }
     ;
 
-/* ── Argumentos ────────────────────────────────────────────────── */
+
+/* ── Argumentos ──────────────────────────────────────────────────── */
 argumentos
-    : argumentos COMMA expresion
+    : argumentos COMA expresion
         { $1.push($3); $$ = $1; }
     | expresion
         { $$ = [$1]; }
     ;
 
-/* ── Expresiones ───────────────────────────────────────────────── */
+
+/* ── Expresiones ─────────────────────────────────────────────────── */
 expresion
-    : expresion PLUS expresion
-        { $$ = { type: 'BinaryExpr', operator: '+', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion MINUS expresion
-        { $$ = { type: 'BinaryExpr', operator: '-', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion TIMES expresion
-        { $$ = { type: 'BinaryExpr', operator: '*', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion DIV expresion
-        { $$ = { type: 'BinaryExpr', operator: '/', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion MOD expresion
-        { $$ = { type: 'BinaryExpr', operator: '%', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion EQ_EQ expresion
-        { $$ = { type: 'BinaryExpr', operator: '==', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion NOT_EQ expresion
-        { $$ = { type: 'BinaryExpr', operator: '!=', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion LT expresion
-        { $$ = { type: 'BinaryExpr', operator: '<', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion LTE expresion
-        { $$ = { type: 'BinaryExpr', operator: '<=', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion GT expresion
-        { $$ = { type: 'BinaryExpr', operator: '>', left: $1, right: $3, loc: loc(@1) }; }
-    | expresion GTE expresion
-        { $$ = { type: 'BinaryExpr', operator: '>=', left: $1, right: $3, loc: loc(@1) }; }
+    /* Operaciones binarias — resueltas por precedencia declarada arriba */
+    : expresion MAS expresion
+        { $$ = { type: 'BinaryExpr', operador: '+', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion MENOS expresion
+        { $$ = { type: 'BinaryExpr', operador: '-', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion ASTERISCO expresion
+        { $$ = { type: 'BinaryExpr', operador: '*', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion DIVISION expresion
+        { $$ = { type: 'BinaryExpr', operador: '/', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion PORCENTAJE expresion
+        { $$ = { type: 'BinaryExpr', operador: '%', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion DOBLE_IGUAL expresion
+        { $$ = { type: 'BinaryExpr', operador: '==', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion NO_IGUAL expresion
+        { $$ = { type: 'BinaryExpr', operador: '!=', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion MENOR expresion
+        { $$ = { type: 'BinaryExpr', operador: '<', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion MENOR_IGUAL expresion
+        { $$ = { type: 'BinaryExpr', operador: '<=', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion MAYOR expresion
+        { $$ = { type: 'BinaryExpr', operador: '>', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+    | expresion MAYOR_IGUAL expresion
+        { $$ = { type: 'BinaryExpr', operador: '>=', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
     | expresion AND expresion
-        { $$ = { type: 'BinaryExpr', operator: '&&', left: $1, right: $3, loc: loc(@1) }; }
+        { $$ = { type: 'BinaryExpr', operador: '&&', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
     | expresion OR expresion
-        { $$ = { type: 'BinaryExpr', operator: '||', left: $1, right: $3, loc: loc(@1) }; }
+        { $$ = { type: 'BinaryExpr', operador: '||', izquierda: $1, derecha: $3, ubicacion: loc(@1) }; }
+
+    /* Operaciones unarias */
     | NOT expresion
-        { $$ = { type: 'UnaryExpr', operator: '!', operand: $2, loc: loc(@1) }; }
-    | MINUS expresion %prec UMINUS
-        { $$ = { type: 'UnaryExpr', operator: '-', operand: $2, loc: loc(@1) }; }
-    | LPAREN expresion RPAREN
+        { $$ = { type: 'UnaryExpr', operador: '!', operando: $2, ubicacion: loc(@1) }; }
+    | MENOS expresion %prec UMINUS
+        { $$ = { type: 'UnaryExpr', operador: '-', operando: $2, ubicacion: loc(@1) }; }
+
+    /* Expresión entre paréntesis */
+    | PARENTESIS_A expresion PARENTESIS_C
         { $$ = $2; }
-    | llamada_funcion_expr
-        { $$ = $1; }
-    | acceso_slice
-        { $$ = $1; }
-    | acceso_atributo
-        { $$ = $1; }
-    | literal_slice
-        { $$ = $1; }
-    | literal
-        { $$ = $1; }
-    | IDENTIFIER
-        { $$ = { type: 'Identifier', name: $1, loc: loc(@1) }; }
+
+    /* Sub-expresiones */
+    | llamada_funcion_expr      { $$ = $1; }
+    | acceso_slice              { $$ = $1; }
+    | acceso_atributo           { $$ = $1; }
+    | literal_slice             { $$ = $1; }
+    | literal                   { $$ = $1; }
+
+    /* Identificador simple */
+    | IDENTIFICADOR
+        { $$ = { type: 'Identifier', nombre: $1, ubicacion: loc(@1) }; }
     ;
 
-/* ── Acceso a elementos de slice ───────────────────────────────── */
+
+/* ── Acceso a elementos de slice / matriz ────────────────────────── */
 acceso_slice
-    : IDENTIFIER LBRACKET expresion RBRACKET
-        { $$ = { type: 'SliceAccess', name: $1, index: $3, loc: loc(@1) }; }
-    | IDENTIFIER LBRACKET expresion RBRACKET LBRACKET expresion RBRACKET
-        { $$ = { type: 'MatrixAccess', name: $1, row: $3, col: $6, loc: loc(@1) }; }
+    /* slice[i] */
+    : IDENTIFICADOR CORCHETE_A expresion CORCHETE_C
+        { $$ = { type: 'SliceAccess', nombre: $1, indice: $3, ubicacion: loc(@1) }; }
+
+    /* matriz[i][j] */
+    | IDENTIFICADOR CORCHETE_A expresion CORCHETE_C CORCHETE_A expresion CORCHETE_C
+        { $$ = { type: 'MatrixAccess', nombre: $1, fila: $3, columna: $6, ubicacion: loc(@1) }; }
     ;
 
-/* ── Acceso a atributos de struct (dot notation) ───────────────── */
+
+/* ── Acceso a atributos de struct (dot notation) ─────────────────── */
 acceso_atributo
-    : IDENTIFIER DOT IDENTIFIER
-        { $$ = { type: 'AttrAccess', object: $1, attribute: $3, loc: loc(@1) }; }
-    | acceso_atributo DOT IDENTIFIER
-        { $$ = { type: 'AttrAccess', object: $1, attribute: $3, loc: loc(@1) }; }
+    /* obj.campo */
+    : IDENTIFICADOR PUNTO IDENTIFICADOR
+        { $$ = { type: 'AttrAccess', objeto: $1, atributo: $3, ubicacion: loc(@1) }; }
+
+    /* obj.campo1.campo2  — acceso encadenado */
+    | acceso_atributo PUNTO IDENTIFICADOR
+        { $$ = { type: 'AttrAccess', objeto: $1, atributo: $3, ubicacion: loc(@1) }; }
     ;
 
-/* ── Literal de slice ──────────────────────────────────────────── */
+
+/* ── Literal de slice / matriz ───────────────────────────────────── */
 literal_slice
-    : LBRACKET RBRACKET tipo LBRACE lista_expresiones RBRACE
-        { $$ = { type: 'SliceLiteral', elementType: $3, values: $5, loc: loc(@1) }; }
-    | LBRACKET RBRACKET LBRACKET RBRACKET tipo LBRACE lista_filas RBRACE
-        { $$ = { type: 'MatrixLiteral', elementType: $5, rows: $7, loc: loc(@1) }; }
+    /* []int{1, 2, 3} */
+    : CORCHETE_A CORCHETE_C tipo LLAVE_A lista_expresiones LLAVE_C
+        { $$ = { type: 'SliceLiteral', tipo: $3, valores: $5, ubicacion: loc(@1) }; }
+
+    /* [][]int{{1,2},{3,4}} */
+    | CORCHETE_A CORCHETE_C CORCHETE_A CORCHETE_C tipo LLAVE_A lista_filas LLAVE_C
+        { $$ = { type: 'MatrixLiteral', tipo: $5, filas: $7, ubicacion: loc(@1) }; }
     ;
 
 lista_filas
-    : lista_filas COMMA LBRACE lista_expresiones RBRACE
+    : lista_filas COMA LLAVE_A lista_expresiones LLAVE_C
         { $1.push($4); $$ = $1; }
-    | LBRACE lista_expresiones RBRACE
+    | LLAVE_A lista_expresiones LLAVE_C
         { $$ = [$2]; }
     ;
 
 lista_expresiones
-    : lista_expresiones COMMA expresion
+    : lista_expresiones COMA expresion
         { $1.push($3); $$ = $1; }
     | expresion
         { $$ = [$1]; }
     ;
 
-/* ── Literales primitivos ──────────────────────────────────────── */
+
+/* ── Literales primitivos ────────────────────────────────────────── */
 literal
     : LIT_INT
-        { $$ = { type: 'IntLiteral', value: parseInt($1), loc: loc(@1) }; }
+        { $$ = { type: 'IntLiteral', valor: parseInt($1, 10), ubicacion: loc(@1) }; }
     | LIT_FLOAT
-        { $$ = { type: 'FloatLiteral', value: parseFloat($1), loc: loc(@1) }; }
+        { $$ = { type: 'FloatLiteral', valor: parseFloat($1), ubicacion: loc(@1) }; }
     | LIT_STRING
-        { $$ = { type: 'StringLiteral', value: $1.slice(1, -1), loc: loc(@1) }; }
+        { $$ = { type: 'StringLiteral', valor: $1.slice(1, -1), ubicacion: loc(@1) }; }
     | LIT_RUNE
-        { $$ = { type: 'RuneLiteral', value: $1.slice(1, -1), loc: loc(@1) }; }
+        { $$ = { type: 'RuneLiteral', valor: $1.slice(1, -1), ubicacion: loc(@1) }; }
     | TRUE
-        { $$ = { type: 'BoolLiteral', value: true, loc: loc(@1) }; }
+        { $$ = { type: 'BoolLiteral', valor: true, ubicacion: loc(@1) }; }
     | FALSE
-        { $$ = { type: 'BoolLiteral', value: false, loc: loc(@1) }; }
+        { $$ = { type: 'BoolLiteral', valor: false, ubicacion: loc(@1) }; }
     | NIL
-        { $$ = { type: 'NilLiteral', value: null, loc: loc(@1) }; }
+        { $$ = { type: 'NilLiteral', valor: null, ubicacion: loc(@1) }; }
     ;
