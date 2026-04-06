@@ -18,6 +18,9 @@ export function interpretar(ast: any): ResultadoEjecucion {
   return { output, errors, symbols };
 }
 
+class BreakSignal {}
+class ContinueSignal {}
+
 function ejecutarNodo(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any> = new Map(), scope: string = entorno.nombre ) {
   switch (nodo.type) {
     case 'Programa':      return ejecutarPrograma(nodo, entorno, output, errors, symbols, funciones, scope);
@@ -29,6 +32,17 @@ function ejecutarNodo(nodo: any, entorno: Entorno, output: string[], errors: Err
     case 'BinaryExpr':    return evaluarBinaryExpr(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'Assignment':    return ejecutarAssignment(nodo, entorno, symbols, funciones, scope);
     case 'Block':         return ejecutarBloque(nodo.cuerpo, new Entorno(entorno, `block_${Date.now()}`), output, errors, symbols, funciones, scope);
+    case 'CompoundAssign':return ejecutarCompoundAssign(nodo, entorno, symbols, funciones, scope);
+    case 'UnaryExpr':     return evaluarUnaryExpr(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'IfStmt':        return ejecutarIf(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'cuerpo_else':   return ejecutarElse(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'SwitchStmt':    return ejecutarSwitch(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'ForWhile':      return ejecutarForWhile(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'Increment':     return ejecutarIncrement(nodo, entorno, symbols, funciones, scope);
+    case 'Decrement':     return ejecutarDecrement(nodo, entorno, symbols, funciones, scope);
+    case 'ForClassic':    return ejecutarForClassic(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'BreakStmt':     throw new BreakSignal(); // manejar en el siguiente paso
+    case 'ContinueStmt':  throw new ContinueSignal(); // manejar en el siguiente paso
     case 'Identifier':    return entorno.get(nodo.nombre);
     case 'IntLiteral':    return nodo.valor;
     case 'StringLiteral': return nodo.valor;
@@ -66,12 +80,137 @@ function ejecutarVarDecl(nodo: any, entorno: Entorno, output: string[], errors: 
       ? ejecutarNodo(nodo.valor, entorno, output, errors, symbols, funciones, scope)
       : valorPorDefecto(tipo);
 
-    entorno.declarar(nodo.nombre, extraerValor(valor), extraerTipo(valor, nodo.tipoDato));
+    entorno.declarar(nodo.nombre, extraerValor(valor), extraerTipo(valor, nodo.tipo?.nombre));
+    console.log('DEBUG nodo VarDecl completo:', JSON.stringify(nodo, null, 2)); // ← agrega esto
     symbols.push({ nombre: nodo.nombre, tipo, valor, scope, linea: nodo.ubicacion?.linea ?? 0 });
   } catch (e: any) {
     errors.push({ type: 'semantico', message: e.message, line: nodo.ubicacion?.linea ?? 0, col: 0 });
   }
 }
+
+function ejecutarCompoundAssign(nodo: any, entorno: Entorno, symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const variable = entorno.get(nodo.nombre);
+  if (variable === undefined) {
+    throw new Error(`Variable no declarada: ${nodo.nombre}`);
+  }
+  if (nodo.operador == '+=') {
+      const valorActual = variable;
+      const valorNuevo = valorActual + ejecutarNodo(nodo.valor, entorno, [], [], symbols, funciones, scope);
+      entorno.set(nodo.nombre, valorNuevo); 
+  }
+  if (nodo.operador == '-=') {
+      const valorActual = variable;
+      const valorNuevo = valorActual - ejecutarNodo(nodo.valor, entorno, [], [], symbols, funciones, scope);
+      entorno.set(nodo.nombre, valorNuevo); 
+  }
+}
+
+function ejecutarIf(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const condicion = ejecutarNodo(nodo.condicion, entorno, output, errors, symbols, funciones, scope);
+  console.log('DEBUG condición if:', condicion, ); // ← agrega esto
+  if (condicion.valor) {
+    ejecutarBloque(nodo.cuerpo, new Entorno(entorno, `if_then_${Date.now()}`), output, errors, symbols, funciones, scope);
+  } else{
+    if (nodo.cuerpo_else == null) {return;}
+    else{
+    ejecutarBloque(nodo.cuerpo_else, new Entorno(entorno, `if_else_${Date.now()}`), output, errors, symbols, funciones, scope);
+    }
+  }
+}
+
+function ejecutarElse(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string){
+  ejecutarBloque(nodo.cuerpo, new Entorno(entorno, `else_${Date.now()}`), output, errors, symbols, funciones, scope);
+}
+
+function ejecutarSwitch(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const valorSwitch = ejecutarNodo(nodo.discriminante, entorno, output, errors, symbols, funciones, scope);
+  let casoEjecutado = false;
+  let defaultCaso: any = null;
+  for (const caso of nodo.casos) {
+    if (caso.type === 'DefaultClause') {
+      defaultCaso = caso;
+      continue;
+    }
+    const valorCaso = ejecutarNodo(caso.condicion, entorno, output, errors, symbols, funciones, scope);
+    if (valorCaso === valorSwitch) {
+      ejecutarBloque(caso.cuerpo, new Entorno(entorno, `switch_case_${Date.now()}`), output, errors, symbols, funciones, scope);
+      casoEjecutado = true;
+      break;
+    }
+    else if (caso.type === 'DefaultClause' && !casoEjecutado) {
+      ejecutarBloque(caso.cuerpo, new Entorno(entorno, `switch_default_${Date.now()}`), output, errors, symbols, funciones, scope);
+    }
+  }
+    if (!casoEjecutado && defaultCaso) {
+    ejecutarBloque(defaultCaso.cuerpo, new Entorno(entorno, `switch_default`), output, errors, symbols, funciones, scope);
+  }
+
+}
+
+
+function ejecutarForWhile(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  console.log('DEBUG nodo ForWhile completo:', JSON.stringify(nodo, null, 2)); // ← agrega esto
+  const entornoFor = new Entorno(entorno, 'for');
+  
+  while (true) {
+    const condicion = extraerValor(ejecutarNodo(nodo.condicion, entornoFor, output, errors, symbols, funciones, scope));
+    if (!condicion) break;
+        try {
+      ejecutarBloque(nodo.cuerpo, entornoFor, output, errors, symbols, funciones, scope);
+    } catch (e) {
+      if (e instanceof BreakSignal) break;
+      if (e instanceof ContinueSignal) continue;
+      throw e; // re-lanzar errores reales
+    }
+  }
+  return;
+}
+
+function ejecutarIncrement(nodo: any, entorno: Entorno, symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const actual = entorno.getSimbolo(nodo.nombre);
+  const nuevoValor = Number(actual?.valor) + 1;
+  entorno.set(nodo.nombre, nuevoValor);
+  return;
+}
+
+function ejecutarDecrement(nodo: any, entorno: Entorno, symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const actual = entorno.getSimbolo(nodo.nombre);
+  const nuevoValor = Number(actual?.valor) - 1;
+  entorno.set(nodo.nombre, nuevoValor);
+  return;
+}
+
+function ejecutarForClassic(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const entornoFor = new Entorno(entorno, 'for_classic');
+  console.log('DEBUG nodo ForClassic completo:', JSON.stringify(nodo, null, 2)); // ← agrega esto
+  ejecutarNodo(nodo.inicializacion, entornoFor, output, errors, symbols, funciones, scope);
+  while (true) {
+    const condicion = extraerValor(ejecutarNodo(nodo.condicion, entornoFor, output, errors, symbols, funciones, scope));
+    if (!condicion) break;
+    try {
+      ejecutarBloque(nodo.cuerpo, entornoFor, output, errors, symbols, funciones, scope);
+      ejecutarNodo(nodo.actualizacion, entornoFor, output, errors, symbols, funciones, scope);
+    } catch (e) {
+      if (e instanceof BreakSignal) break;
+      if (e instanceof ContinueSignal) continue;
+      throw e;
+    }
+    
+  }
+}
+
+function evaluarUnaryExpr(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const resultado = resolverConTipo(nodo.operando, entorno, output, errors, symbols, funciones, scope);
+  if (nodo.operador === '-') {
+    return { valor: -Number(resultado.valor), tipo: resultado.tipo };
+  }
+  if (nodo.operador === '!') {
+    return { valor: !resultado.valor, tipo: 'bool' };
+  }
+  return resultado;
+}
+
+
 
 function ejecutarAssignment(nodo: any, entorno: Entorno, symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const valor = ejecutarNodo(nodo.valor, entorno, [], [], symbols);
@@ -90,7 +229,7 @@ function ejecutarShortVarDecl(
     const valor = ejecutarNodo(nodo.valor, entorno, output, errors, symbols, funciones, scope);
     const tipo  = inferirTipo(valor);
 
-    entorno.declarar(nodo.nombre, extraerValor(valor), extraerTipo(valor, nodo.tipoDato));
+    entorno.declarar(nodo.nombre, extraerValor(valor), extraerTipo(valor, nodo.tipo?.nombre));
     symbols.push({ nombre: nodo.nombre, tipo, valor, scope, linea: nodo.ubicacion?.linea ?? 0 });
   } catch (e: any) {
     errors.push({ type: 'semantico', message: e.message, line: nodo.ubicacion?.linea ?? 0, col: 0 });
@@ -163,6 +302,13 @@ function resolverConTipo(nodo: any, entorno: Entorno, output: string[], errors: 
   if (nodo.type === 'StringLiteral') return { valor: nodo.valor, tipo: 'string' };
   if (nodo.type === 'BoolLiteral')   return { valor: nodo.valor, tipo: 'bool' };
   if (nodo.type === 'RuneLiteral')   return { valor: nodo.valor, tipo: 'rune' };
+  if (nodo.type === 'UnaryExpr') {
+  const resultado = resolverConTipo(nodo.operando, entorno, output, errors, symbols, funciones, scope);
+  if (nodo.operador === '-') {
+    return { valor: -Number(resultado.valor), tipo: resultado.tipo };
+  }
+  return resultado;
+}
   // Para expresiones compuestas (BinaryExpr anidado, etc.)
   const val = ejecutarNodo(nodo, entorno, output, errors, symbols, funciones, scope);
   // Si ya viene con tipo (cuando BinaryExpr devuelva {valor, tipo})
@@ -225,13 +371,10 @@ function operarSuma(izq: any, ti: string, der: any, td: string): { valor: any; t
     const sd = td === 'rune' ? String.fromCharCode(runeANum(der)) : String(der);
     return { valor: si + sd, tipo: 'string' };
   }
-  // bool + bool → bool (OR según spec)
   if (ti === 'bool' && td === 'bool') return { valor: izq || der, tipo: 'bool' };
-  // float64 en cualquier lado → float64
   if (ti === 'float64' || td === 'float64') {
     return { valor: Number(ti === 'rune' ? runeANum(izq) : izq) + Number(td === 'rune' ? runeANum(der) : der), tipo: 'float64' };
   }
-  // int, rune, bool → int
   return { valor: runeANum(izq) + runeANum(der), tipo: 'int' };
 }
 
