@@ -4,7 +4,14 @@ import { interpretar } from './grammar/interpreter';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const parser = require(require('path').join(__dirname, 'grammar', 'parser.js'));
-
+(parser as any).parseError = function (msg: any, hash: any) {
+    console.log("---- ERROR SINTACTICO ----");
+    console.log(msg);
+    console.log("Token:", hash.token);
+    console.log("Texto:", hash.text);
+    console.log("Linea:", hash.loc?.first_line);
+    console.log("Columna:", hash.loc?.first_column);
+};
 @Injectable()
 export class InterpreterService {
 

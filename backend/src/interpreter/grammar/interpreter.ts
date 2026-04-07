@@ -41,6 +41,8 @@ function ejecutarNodo(nodo: any, entorno: Entorno, output: string[], errors: Err
     case 'Increment':     return ejecutarIncrement(nodo, entorno, symbols, funciones, scope);
     case 'Decrement':     return ejecutarDecrement(nodo, entorno, symbols, funciones, scope);
     case 'ForClassic':    return ejecutarForClassic(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'SliceLiteral':  return ejecutarSliceLiteral(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'ForRange':      return ejecutarForRange(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'BreakStmt':     throw new BreakSignal(); // manejar en el siguiente paso
     case 'ContinueStmt':  throw new ContinueSignal(); // manejar en el siguiente paso
     case 'Identifier':    return entorno.get(nodo.nombre);
@@ -81,7 +83,6 @@ function ejecutarVarDecl(nodo: any, entorno: Entorno, output: string[], errors: 
       : valorPorDefecto(tipo);
 
     entorno.declarar(nodo.nombre, extraerValor(valor), extraerTipo(valor, nodo.tipo?.nombre));
-    console.log('DEBUG nodo VarDecl completo:', JSON.stringify(nodo, null, 2)); // ← agrega esto
     symbols.push({ nombre: nodo.nombre, tipo, valor, scope, linea: nodo.ubicacion?.linea ?? 0 });
   } catch (e: any) {
     errors.push({ type: 'semantico', message: e.message, line: nodo.ubicacion?.linea ?? 0, col: 0 });
@@ -107,7 +108,6 @@ function ejecutarCompoundAssign(nodo: any, entorno: Entorno, symbols: SymbolInfo
 
 function ejecutarIf(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const condicion = ejecutarNodo(nodo.condicion, entorno, output, errors, symbols, funciones, scope);
-  console.log('DEBUG condición if:', condicion, ); // ← agrega esto
   if (condicion.valor) {
     ejecutarBloque(nodo.cuerpo, new Entorno(entorno, `if_then_${Date.now()}`), output, errors, symbols, funciones, scope);
   } else{
@@ -149,7 +149,6 @@ function ejecutarSwitch(nodo: any, entorno: Entorno, output: string[], errors: E
 
 
 function ejecutarForWhile(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
-  console.log('DEBUG nodo ForWhile completo:', JSON.stringify(nodo, null, 2)); // ← agrega esto
   const entornoFor = new Entorno(entorno, 'for');
   
   while (true) {
@@ -200,6 +199,43 @@ function ejecutarForClassic(nodo: any, entorno: Entorno, output: string[], error
     if (doContinue) continue;
   }
 }
+
+function ejecutarSliceLiteral(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const elementos = nodo.valores.map((e: any) => extraerValor(ejecutarNodo(e, entorno, output, errors, symbols, funciones, scope)));
+  return elementos;
+}
+
+function ejecutarForRange(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
+  const iterable = extraerValor(ejecutarNodo(nodo.iterable, entorno, output, errors, symbols, funciones, scope));
+  if (!Array.isArray(iterable)) {
+    errors.push({
+      type: 'runtime',
+      message: 'El valor en un for range debe ser un slice',
+      line: nodo.ubicacion?.linea ?? 0,
+      col: 0,
+    });
+    return;
+  }
+
+  for (let indice = 0; indice < iterable.length; indice++) {
+    const valor = iterable[indice];
+    const entornoRange = new Entorno(entorno, `for_range_${indice}`);
+    if (nodo.indice && nodo.indice !== '_') {
+      entornoRange.declarar(nodo.indice, indice, 'int');
+    }
+    if (nodo.valor && nodo.valor !== '_') {
+      entornoRange.declarar(nodo.valor, valor, inferirTipo(valor));
+    }
+    try {
+      ejecutarBloque(nodo.cuerpo, entornoRange, output, errors, symbols, funciones, scope);
+    } catch (e) {
+      if (e instanceof BreakSignal)    break;
+      if (e instanceof ContinueSignal) continue;
+      throw e;
+    }
+  }
+}
+
 
 function evaluarUnaryExpr(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const resultado = resolverConTipo(nodo.operando, entorno, output, errors, symbols, funciones, scope);
@@ -271,10 +307,6 @@ function inferirTipo(valor: any): string {
 function formatearArgPrint(arg: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string): string {
   if (arg.type === 'Identifier') {
     const simbolo = entorno.getSimbolo(arg.nombre); // el objeto completo, no solo el valor
-    console.log('DEBUG simbolo:', simbolo); // ← ¿qué llega aquí?
-    console.log('DEBUG tipo:', simbolo?.tipo);
-    console.log('DEBUG valor:', simbolo?.valor);
-    console.log('DEBUG isInteger:', Number.isInteger(Number(simbolo?.valor)));
     if (simbolo?.tipo === 'float64' && Number.isInteger(Number(simbolo.valor))) {
       return Number(simbolo.valor).toFixed(1);
     }

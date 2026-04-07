@@ -178,8 +178,6 @@ programa
 definiciones_globales
     : definiciones_globales definicion_global
         { $1.push($2); $$ = $1; }
-    | definiciones_globales error '}'
-        { $$ = $1; /* descarta la definición inválida y sigue */ }
     | definicion_global
         { $$ = [$1]; }
     | /* vacío */
@@ -280,10 +278,8 @@ tipo
 sentencias
     : sentencias sentencia
         { $1.push($2); $$ = $1; }
-    | sentencias error ';'
-        { $$ = $1; /* descarta sentencia inválida, sincroniza en ';' */ }
-    | sentencias error '}'
-    { $$ = $1; /* recupera bloques mal formados */ }
+    | sentencia
+        { $$ = [$1]; }
     | /* vacío */
         { $$ = []; }
     ;
