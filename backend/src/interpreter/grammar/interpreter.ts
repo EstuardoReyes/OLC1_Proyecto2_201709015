@@ -31,10 +31,10 @@ function ejecutarNodo(nodo: any, entorno: Entorno, output: string[], errors: Err
     case 'PrintlnCall':   return ejecutarPrintln(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'BinaryExpr':    return evaluarBinaryExpr(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'Assignment':    return ejecutarAssignment(nodo, entorno, symbols, funciones, scope);
-    case 'Block':         return ejecutarBloque(nodo.cuerpo, new Entorno(entorno, `block_${Date.now()}`), output, errors, symbols, funciones, scope);
+    case 'Block':         return ejecutarBloque(nodo.cuerpo, new Entorno(entorno, `block_${Date.now()}`), output, errors, symbols, funciones,  `block_${Date.now()}`);
     case 'CompoundAssign':return ejecutarCompoundAssign(nodo, entorno, symbols, funciones, scope);
     case 'UnaryExpr':     return evaluarUnaryExpr(nodo, entorno, output, errors, symbols, funciones, scope);
-    case 'IfStmt':        return ejecutarIf(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'IfStmt':        return ejecutarIf(nodo, entorno, output, errors, symbols, funciones,  `if_${Date.now()}`);
     case 'cuerpo_else':   return ejecutarElse(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'SwitchStmt':    return ejecutarSwitch(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'ForWhile':      return ejecutarForWhile(nodo, entorno, output, errors, symbols, funciones, scope);
@@ -155,7 +155,7 @@ function ejecutarForWhile(nodo: any, entorno: Entorno, output: string[], errors:
   while (true) {
     const condicion = extraerValor(ejecutarNodo(nodo.condicion, entornoFor, output, errors, symbols, funciones, scope));
     if (!condicion) break;
-        try {
+    try {
       ejecutarBloque(nodo.cuerpo, entornoFor, output, errors, symbols, funciones, scope);
     } catch (e) {
       if (e instanceof BreakSignal) break;
@@ -163,39 +163,41 @@ function ejecutarForWhile(nodo: any, entorno: Entorno, output: string[], errors:
       throw e; // re-lanzar errores reales
     }
   }
-  return;
 }
 
 function ejecutarIncrement(nodo: any, entorno: Entorno, symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const actual = entorno.getSimbolo(nodo.nombre);
   const nuevoValor = Number(actual?.valor) + 1;
   entorno.set(nodo.nombre, nuevoValor);
-  return;
 }
 
 function ejecutarDecrement(nodo: any, entorno: Entorno, symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const actual = entorno.getSimbolo(nodo.nombre);
   const nuevoValor = Number(actual?.valor) - 1;
   entorno.set(nodo.nombre, nuevoValor);
-  return;
 }
 
 function ejecutarForClassic(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const entornoFor = new Entorno(entorno, 'for_classic');
-  console.log('DEBUG nodo ForClassic completo:', JSON.stringify(nodo, null, 2)); // ← agrega esto
   ejecutarNodo(nodo.inicializacion, entornoFor, output, errors, symbols, funciones, scope);
+
   while (true) {
     const condicion = extraerValor(ejecutarNodo(nodo.condicion, entornoFor, output, errors, symbols, funciones, scope));
     if (!condicion) break;
+
+    let doContinue = false;
     try {
       ejecutarBloque(nodo.cuerpo, entornoFor, output, errors, symbols, funciones, scope);
-      ejecutarNodo(nodo.actualizacion, entornoFor, output, errors, symbols, funciones, scope);
     } catch (e) {
       if (e instanceof BreakSignal) break;
-      if (e instanceof ContinueSignal) continue;
-      throw e;
+      if (e instanceof ContinueSignal) { doContinue = true; }
+      else throw e;
     }
-    
+
+    // La actualización SIEMPRE corre, ya sea continue normal o por ContinueSignal
+    ejecutarNodo(nodo.actualizacion, entornoFor, output, errors, symbols, funciones, scope);
+
+    if (doContinue) continue;
   }
 }
 

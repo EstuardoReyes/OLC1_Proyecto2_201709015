@@ -121,13 +121,17 @@
 <<EOF>>                             return 'EOF';
 
 /* Error léxico — descarta el carácter y continúa */
-.   {
-        console.error(
-            'Error léxico: símbolo no reconocido "' + yytext +
-            '" en línea ' + yylloc.first_line +
-            ', columna ' + yylloc.first_column
-        );
-    }
+.         {
+            /* Catch-all: cualquier carácter no reconocido */
+            yy.lexErrors = yy.lexErrors || [];
+            yy.lexErrors.push({
+                type:    'lexico',
+                message: `Carácter inesperado: '${yytext}'`,
+                line:    yylloc.first_line,
+                col:     yylloc.first_column,
+            });
+            /* No retornamos token — el lexer sigue al siguiente carácter */
+          }
 
 /lex
 
@@ -166,14 +170,20 @@
 programa
     : definiciones_globales EOF
         { $$ = { type: 'Programa', cuerpo: $1, ubicacion: loc(@1) }; return $$; }
+    | error EOF
+        { $$ = { type: 'Programa', cuerpo: [], ubicacion: loc(@1) }; return $$; }
     ;
 
 /* Lista de definiciones globales (funciones y structs) */
 definiciones_globales
     : definiciones_globales definicion_global
-        { $1.push($2); $$ = $1; }             /* caso recursivo: agrega al arreglo */
+        { $1.push($2); $$ = $1; }
+    | definiciones_globales error '}'
+        { $$ = $1; /* descarta la definición inválida y sigue */ }
     | definicion_global
-        { $$ = [$1]; }                         /* caso base: primer elemento */
+        { $$ = [$1]; }
+    | /* vacío */
+        { $$ = []; }
     ;
 
 definicion_global
@@ -270,6 +280,10 @@ tipo
 sentencias
     : sentencias sentencia
         { $1.push($2); $$ = $1; }
+    | sentencias error ';'
+        { $$ = $1; /* descarta sentencia inválida, sincroniza en ';' */ }
+    | sentencias error '}'
+    { $$ = $1; /* recupera bloques mal formados */ }
     | /* vacío */
         { $$ = []; }
     ;

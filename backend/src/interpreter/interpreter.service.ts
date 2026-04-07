@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { CompileRequest, CompileResponse } from './types/compiler.types';
 import { interpretar } from './grammar/interpreter';
 
-// Jison genera un .js plano — se importa con require
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const parser = require(require('path').join(__dirname, 'grammar', 'parser.js'));
 
@@ -11,9 +10,7 @@ export class InterpreterService {
 
   compile(req: CompileRequest): CompileResponse {
     const { code } = req;
-    //console.log('Compilando código:\n', code);
 
-    // Validación básica
     if (!code || code.trim().length === 0) {
       return {
         success: false,
@@ -24,60 +21,90 @@ export class InterpreterService {
       };
     }
 
-    // ── Parsear con Jison ───────────────────────────────────────
     const errors: CompileResponse['errors'] = [];
-
-    // Capturar errores léxicos que vienen del console.error del lexer
-    const originalConsoleError = console.error;
-    console.error = (...args: any[]) => {
-      const mensaje = args.join(' ');
-      // Intentar extraer línea y columna del mensaje
-      const match = mensaje.match(/línea (\d+), columna (\d+)/);
-      errors.push({
-        type:    'lexico',
-        message: mensaje,
-        line:    match ? parseInt(match[1]) : 0,
-        col:     match ? parseInt(match[2]) : 0,
-      });
-    };
-
     let ast: any = null;
 
-    try {
-      ast = parser.parse(code);
-    } catch (e: any) {
-      // Errores sintácticos — Jison lanza una excepción con e.hash
+    // ── Capturar errores de Jison vía console.error ANTES de parsear ──
+    const originalConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      // Jison imprime algo como: "Línea X: mensaje"
+      // Lo capturamos pero no lo registramos aquí — el catch lo hará con más info
+      // Solo logueamos en dev para no perder el trace
+      originalConsoleError(...args);
+    };
+
+  try {
+  // Inicializar el contenedor de errores léxicos en yy
+  parser.yy = {
+    errors: [],
+    parseError: (msg: string, hash: any) => {
       errors.push({
         type:    'sintactico',
-        message: e.message ?? 'Error sintáctico desconocido',
-        line:    e.hash?.loc?.first_line   ?? 0,
-        col:     e.hash?.loc?.first_column ?? 0,
+        message: this.limpiarMensajeJison(msg),
+        line:    hash?.loc?.first_line   ?? 0,
+        col:     hash?.loc?.first_column ?? 0,
       });
-    } finally {
-      // Restaurar console.error siempre, incluso si hubo excepción
-      console.error = originalConsoleError;
     }
+  };
 
-    // Si hubo errores, devolver sin ejecutar el intérprete
+  ast = parser.parse(code);
+
+  // Recoger errores léxicos acumulados durante el tokenizado
+  if (parser.yy.lexErrors?.length > 0) {
+    errors.push(...parser.yy.lexErrors);
+  }
+
+} catch (e: any) {
+  errors.push({
+    type:    'sintactico',
+    message: this.limpiarMensajeJison(e.message ?? 'Error sintáctico'),
+    line:    e.hash?.loc?.first_line   ?? 0,
+    col:     e.hash?.loc?.first_column ?? 0,
+  });
+} finally {
+  console.error = originalConsoleError;
+}
+
     if (errors.length > 0) {
-      return {
-        success: false,
-        output:  [],
-        errors,
-        symbols: [],
-        ast:     null,
-      };
+      return { success: false, output: [], errors, symbols: [], ast: null };
     }
 
     // ── Intérprete ───────────────────────────────────────────────
-    const { output, errors: erroresRuntime, symbols } = interpretar(ast);
+    try {
+      const { output, errors: erroresRuntime, symbols } = interpretar(ast);
+      return {
+        success: erroresRuntime.length === 0,
+        output,
+        errors:  erroresRuntime.map(e => ({
+          ...e,
+          type: e.type as 'lexico' | 'sintactico' | 'semantico',
+        })),
+        symbols: symbols.map(s => ({
+          name:     s.nombre,
+          kind:     'variable' as const,
+          dataType: s.tipo,
+          scope:    s.scope,
+          line:     s.linea,
+        })),
+        ast,
+      };
+    } catch (e: any) {
+      // Errores inesperados en el intérprete (bugs internos)
+      return {
+        success: false,
+        output:  [],
+        errors:  [{ type: 'semantico', message: `Error interno del intérprete: ${e.message}`, line: 0, col: 0 }],
+        symbols: [],
+        ast,
+      };
+    }
+  }
 
-    return {
-      success: erroresRuntime.length === 0,
-      output,
-      errors:  erroresRuntime.map(e => ({ ...e, type: e.type as 'lexico' | 'sintactico' | 'semantico' })),
-      symbols: symbols.map(s => ({ name: s.nombre, kind: 'variable' as const, dataType: s.tipo, scope: s.scope, line: s.linea })),
-      ast,
-    };
+  private limpiarMensajeJison(msg: string): string {
+    // Jison genera mensajes verbosos como:
+    // "Parse error on line 3:\n...expecting X, Y, Z"
+    // Extraemos solo la parte útil
+    const match = msg.match(/Parse error on line \d+[^]*?(?=\n\n|$)/);
+    return match ? match[0].replace(/\n/g, ' ').trim() : msg;
   }
 }
