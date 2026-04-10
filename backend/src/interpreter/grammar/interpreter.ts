@@ -1,3 +1,4 @@
+import e from 'express';
 import { Entorno } from './entorno';
 import { ErrorInfo, SymbolInfo, ResultadoEjecucion } from './tipos';
 
@@ -43,6 +44,10 @@ function ejecutarNodo(nodo: any, entorno: Entorno, output: string[], errors: Err
     case 'ForClassic':    return ejecutarForClassic(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'SliceLiteral':  return ejecutarSliceLiteral(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'ForRange':      return ejecutarForRange(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'SliceAccess':   return ejecutarSliceAccess(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'SliceAssign':   return ejecutarSliceAssign(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'LenCall':       return ejecutarLenCall(nodo, entorno, output, errors, symbols, funciones, scope);
+    case 'AppendAssign':  return ejecutarAppendAssign(nodo, entorno, output, errors, symbols, funciones, scope);
     case 'BreakStmt':     throw new BreakSignal(); // manejar en el siguiente paso
     case 'ContinueStmt':  throw new ContinueSignal(); // manejar en el siguiente paso
     case 'Identifier':    return entorno.get(nodo.nombre);
@@ -205,6 +210,71 @@ function ejecutarSliceLiteral(nodo: any, entorno: Entorno, output: string[], err
   return elementos;
 }
 
+function ejecutarSliceAccess(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) { 
+  const slice = entorno.get(nodo.nombre);
+  console.log('Slice obtenido:', slice);
+  const indice = nodo.indice.valor; // asumiendo que el índice es un IntLiteral, ajustar si es necesario
+  if (indice < 0 || indice >= slice.length) {
+    errors.push({
+      type: 'runtime',
+      message: 'Índice fuera de los límites',
+      line: nodo.ubicacion?.linea ?? 0,
+      col: 0,
+    });
+    return;
+  }
+
+  return slice[indice];
+}
+
+function ejecutarSliceAssign(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string): any {
+  const slices = entorno.get(nodo.nombre);
+  const indice = nodo.indice.valor;
+  const nuevoValor = extraerValor(ejecutarNodo(nodo.valor, entorno, output, errors, symbols, funciones, scope));
+  if (indice < 0 || indice >= slices.length) {
+    errors.push({
+      type: 'runtime',
+      message: 'Índice fuera de los límites',
+      line: nodo.ubicacion?.linea ?? 0,
+      col: 0,
+    });
+    return;
+  }
+  slices[indice] = nuevoValor;
+  return slices;
+}
+  
+function ejecutarLenCall(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string): any {
+  const slice = entorno.get(nodo.arg.nombre);
+  if (!Array.isArray(slice)) {
+    errors.push({
+      type: 'warning',
+      message: 'El argumento de len debe ser un slice',
+      line: nodo.ubicacion?.linea ?? 0,
+      col: 0,
+    });
+    return 0; // intentar devolver longitud de lo que sea, aunque no sea slice
+  }
+  return slice.length;
+}
+
+function ejecutarAppendAssign(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string): any { 
+  console.log('Ejecutando append:', nodo);
+  const slice = entorno.get(nodo.nombre);
+  const nuevoValor = extraerValor(ejecutarNodo(nodo.valor, entorno, output, errors, symbols, funciones, scope));
+  if (!Array.isArray(slice)) {
+    errors.push({
+      type: 'runtime',
+      message: 'El objetivo de append debe ser un slice',
+      line: nodo.ubicacion?.linea ?? 0,
+      col: 0,
+    });
+    return;
+  }
+  slice.push(nuevoValor);
+  return slice;
+}
+
 function ejecutarForRange(nodo: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string) {
   const iterable = extraerValor(ejecutarNodo(nodo.iterable, entorno, output, errors, symbols, funciones, scope));
   if (!Array.isArray(iterable)) {
@@ -219,20 +289,24 @@ function ejecutarForRange(nodo: any, entorno: Entorno, output: string[], errors:
 
   for (let indice = 0; indice < iterable.length; indice++) {
     const valor = iterable[indice];
-    const entornoRange = new Entorno(entorno, `for_range_${indice}`);
-    if (nodo.indice && nodo.indice !== '_') {
-      entornoRange.declarar(nodo.indice, indice, 'int');
-    }
-    if (nodo.valor && nodo.valor !== '_') {
-      entornoRange.declarar(nodo.valor, valor, inferirTipo(valor));
-    }
-    try {
-      ejecutarBloque(nodo.cuerpo, entornoRange, output, errors, symbols, funciones, scope);
-    } catch (e) {
-      if (e instanceof BreakSignal)    break;
-      if (e instanceof ContinueSignal) continue;
-      throw e;
-    }
+    procesarIteracionForRange(nodo, indice, valor, { entorno, output, errors, symbols, funciones, scope });
+  }
+}
+
+function procesarIteracionForRange(nodo: any, indice: number, valor: any, context: { entorno: Entorno; output: string[]; errors: ErrorInfo[]; symbols: SymbolInfo[]; funciones: Map<string, any>; scope: string }): void {
+  const entornoRange = new Entorno(context.entorno, `for_range_${indice}`);
+  if (nodo.indice && nodo.indice !== '_') {
+    entornoRange.declarar(nodo.indice, indice, 'int');
+  }
+  if (nodo.valor && nodo.valor !== '_') {
+    entornoRange.declarar(nodo.valor, valor, inferirTipo(valor));
+  }
+  try {
+    ejecutarBloque(nodo.cuerpo, entornoRange, context.output, context.errors, context.symbols, context.funciones, context.scope);
+  } catch (e) {
+    if (e instanceof BreakSignal) throw e;
+    if (e instanceof ContinueSignal) throw e;
+    throw e;
   }
 }
 
@@ -306,16 +380,24 @@ function inferirTipo(valor: any): string {
 
 function formatearArgPrint(arg: any, entorno: Entorno, output: string[], errors: ErrorInfo[], symbols: SymbolInfo[], funciones: Map<string, any>, scope: string): string {
   if (arg.type === 'Identifier') {
-    const simbolo = entorno.getSimbolo(arg.nombre); // el objeto completo, no solo el valor
+    const simbolo = entorno.getSimbolo(arg.nombre);
+    if (Array.isArray(simbolo?.valor)) {
+      return formatearValorSlice(simbolo.valor);
+    }
     if (simbolo?.tipo === 'float64' && Number.isInteger(Number(simbolo.valor))) {
       return Number(simbolo.valor).toFixed(1);
     }
     return String(simbolo?.valor ?? '');
   }
-  // Para todo lo demás (literales, expresiones binarias, etc.) ejecuta normal
   const resultado = ejecutarNodo(arg, entorno, output, errors, symbols, funciones, scope);
   if (resultado && typeof resultado === 'object' && 'tipo' in resultado) {
+    if (Array.isArray(resultado.valor)) {
+      return formatearValorSlice(resultado.valor);
+    }
     return formatearValor(resultado.valor, resultado.tipo);
+  }
+  if (Array.isArray(resultado)) {
+    return formatearValorSlice(resultado);
   }
   return String(resultado);
 }
@@ -349,7 +431,7 @@ function resolverConTipo(nodo: any, entorno: Entorno, output: string[], errors: 
   if (val && typeof val === 'object' && 'tipo' in val) return val;
   return { valor: val, tipo: typeof val === 'number' ? 'int' : typeof val };
 }
-// Helper universal — ponlo cerca de ejecutarNodo
+
 function extraerValor(resultado: any): any {
   if (resultado && typeof resultado === 'object' && 'tipo' in resultado) {
     return resultado.valor;
@@ -441,8 +523,14 @@ function operarDiv(izq: any, ti: string, der: any, td: string): { valor: any; ti
 }
 
 function formatearValor(valor: any, tipo: string): string {
-  if (tipo === 'float64' && Number.isInteger(Number(valor))) {
-    return Number(valor).toFixed(1);
+  if (Array.isArray(valor)) return formatearValorSlice(valor); // ✅ agrega esto
+  if (tipo === 'float64' && Number.isInteger(Number(valor))) return Number(valor).toFixed(1);
+  return String(valor ?? '');
+}
+
+function formatearValorSlice(valor: any): string {
+  if (Array.isArray(valor)) {
+    return `[${valor.map(formatearValorSlice).join(' ')}]`;
   }
-  return String(valor);
+  return String(valor ?? '');
 }

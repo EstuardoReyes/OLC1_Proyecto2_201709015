@@ -3,7 +3,7 @@
  */
  
 export interface ErrorInfo {
-  type:    'lexico' | 'sintactico' | 'semantico' | 'runtime';
+  type:    'lexico' | 'sintactico' | 'semantico' | 'runtime' | 'warning';
   message: string;
   line:    number;
   col:     number;
