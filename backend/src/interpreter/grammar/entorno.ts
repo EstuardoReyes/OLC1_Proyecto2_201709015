@@ -14,6 +14,12 @@ export class Entorno {
     throw new Error(`Variable '${nombre}' no declarada`);
   }
 
+  getTipo(nombre: string): any {
+    if (this.variables.has(nombre)) return this.variables.get(nombre)!.tipo;
+    if (this.padre) return this.padre.getTipo(nombre);
+    throw new Error(`Variable '${nombre}' no declarada`);
+  }
+
   // Devuelve el objeto completo { valor, tipo }
   getSimbolo(nombre: string): { valor: any; tipo: string } | null {
     if (this.variables.has(nombre)) return this.variables.get(nombre)!;
@@ -33,4 +39,6 @@ export class Entorno {
     }
     throw new Error(`Variable '${nombre}' no declarada`);
   }
+
+
 }

@@ -115,7 +115,7 @@
 "."                                 return 'PUNTO';
 
 /* Identificadores — al final, después de todas las keywords */
-[a-zA-Z_][a-zA-Z0-9_]*             return 'IDENTIFICADOR';
+[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ_][a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9_]*            return 'IDENTIFICADOR';
 
 /* Fin de archivo */
 <<EOF>>                             return 'EOF';
@@ -175,20 +175,20 @@ programa
     ;
 
 /* Lista de definiciones globales (funciones y structs) */
-definiciones_globales
-    : definiciones_globales definicion_global
-        { $1.push($2); $$ = $1; }
-    | definicion_global
-        { $$ = [$1]; }
-    | /* vacío */
-        { $$ = []; }
-    ;
-
 definicion_global
     : declaracion_funcion
         { $$ = $1; }
     | declaracion_struct
         { $$ = $1; }
+    ;
+
+definiciones_globales
+    : definiciones_globales definicion_global
+        { $1.push($2); $$ = $1; }   // agregar el push
+    | definicion_global
+        { $$ = [$1]; }
+    | /* vacío */
+        { $$ = []; }
     ;
 
 
@@ -320,6 +320,9 @@ declaracion_variable
     /* Persona p = (nombre: "Juan", edad: 20) */
     | IDENTIFICADOR IDENTIFICADOR IGUAL PARENTESIS_A campos_struct_init PARENTESIS_C
         { $$ = { type: 'StructInstance', tipoStruct: $1, nombre: $2, campos: $5, ubicacion: loc(@1) }; }
+
+    | IDENTIFICADOR IDENTIFICADOR IGUAL struct_literal
+        { $$ = { type: 'StructVarDecl', tipoStruct: $1, nombre: $2, valor: $4, ubicacion: loc(@1) }; }
     ;
 
 
@@ -553,6 +556,27 @@ argumentos
         { $$ = [$1]; }
     ;
 
+/* ──Stuct Literal ─────────────────────────────────────────────────*/
+struct_literal
+    : LLAVE_A campos_instancia LLAVE_C
+        { $$ = { type: 'StructLiteral', campos: $2, ubicacion: loc(@1) }; }
+    ;
+
+campos_instancia
+    : campos_instancia COMA campo_instancia
+        { $1.push($3); $$ = $1; }
+    | campo_instancia
+        { $$ = [$1]; }
+    ;
+
+campo_instancia
+    : IDENTIFICADOR DOS_PUNTOS expresion
+        { $$ = { campo: $1, valor: $3, ubicacion: loc(@1) }; }
+    /* campo con struct anidado */
+    | IDENTIFICADOR DOS_PUNTOS struct_literal
+        { $$ = { campo: $1, valor: $3, ubicacion: loc(@1) }; }
+    ;
+
 
 /* ── Expresiones ─────────────────────────────────────────────────── */
 expresion
@@ -604,6 +628,9 @@ expresion
     /* Identificador simple */
     | IDENTIFICADOR
         { $$ = { type: 'Identifier', nombre: $1, ubicacion: loc(@1) }; }
+
+    | struct_literal
+        { $$ = $1; }
     ;
 
 
@@ -647,6 +674,8 @@ lista_filas
         { $1.push($4); $$ = $1; }
     | LLAVE_A lista_expresiones LLAVE_C
         { $$ = [$2]; }
+    | lista_filas COMA
+        { $$ = $1; }
     ;
 
 lista_expresiones
@@ -654,6 +683,8 @@ lista_expresiones
         { $1.push($3); $$ = $1; }
     | expresion
         { $$ = [$1]; }
+    | lista_expresiones COMA
+        { $$ = $1; }        /* trailing comma */
     ;
 
 
