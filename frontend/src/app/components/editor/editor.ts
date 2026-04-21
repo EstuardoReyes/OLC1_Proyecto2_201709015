@@ -70,22 +70,11 @@ export class Editor implements AfterViewInit, OnDestroy {
       cursorBlinking:       'smooth',
       smoothScrolling:      true,
       fixedOverflowWidgets: true,
- 
-      // ── FIX cursor salta fuera de paréntesis ──────────────────
-      // Monaco por defecto cierra pares automáticamente ({}, (), [], "")
-      // lo cual mueve el cursor y choca con los snippets
       autoClosingBrackets:      'never',
       autoClosingQuotes:        'never',
       autoSurround:             'never',
- 
-      // ── FIX sugerencias extras ────────────────────────────────
-      // Desactiva las sugerencias basadas en palabras del documento
       wordBasedSuggestions:     'off',
- 
-      // Sugerencias solo con Ctrl+Space, no mientras escribes
       quickSuggestions:         false,
- 
-      // No aceptar sugerencia al presionar Enter (evita inserciones accidentales)
       acceptSuggestionOnEnter:  'off',
     });
  

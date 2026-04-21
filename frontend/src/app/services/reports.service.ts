@@ -15,11 +15,6 @@ export interface SymbolEntry {
   line:     number;
 }
 
-export interface ASTNode {
-  type:      string;
-  value?:    string;
-  children?: ASTNode[];
-}
 
 /**
  * ReportsService
@@ -33,11 +28,11 @@ export interface ASTNode {
 export class ReportsService {
   errors  = signal<ErrorEntry[]>([]);
   symbols = signal<SymbolEntry[]>([]);
-  ast     = signal<ASTNode | null>(null);
+  ast     = signal<string | null>(null);
 
   setErrors(errors: ErrorEntry[]):   void { this.errors.set(errors); }
   setSymbols(symbols: SymbolEntry[]): void { this.symbols.set(symbols); }
-  setAst(ast: ASTNode | null):       void { this.ast.set(ast); }
+  setAst(dotString: string | null):  void { this.ast.set(dotString); }
 
   clearAll(): void {
     this.errors.set([]);

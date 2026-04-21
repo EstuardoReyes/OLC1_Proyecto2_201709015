@@ -31,17 +31,12 @@ export class InterpreterService {
     const errors: CompileResponse['errors'] = [];
     let ast: any = null;
 
-    // ── Capturar errores de Jison vía console.error ANTES de parsear ──
     const originalConsoleError = console.error;
     console.error = (...args: any[]) => {
-      // Jison imprime algo como: "Línea X: mensaje"
-      // Lo capturamos pero no lo registramos aquí — el catch lo hará con más info
-      // Solo logueamos en dev para no perder el trace
       originalConsoleError(...args);
     };
 
   try {
-  // Inicializar el contenedor de errores léxicos en yy
   parser.yy = {
     errors: [],
     parseError: (msg: string, hash: any) => {
@@ -76,6 +71,9 @@ export class InterpreterService {
       return { success: false, output: [], errors, symbols: [], ast: null };
     }
 
+    // ── Generar DOT del AST (siempre que el parse fue exitoso) ──
+    const astDot = ast ? this.generateASTDot(ast) : null;
+
     // ── Intérprete ───────────────────────────────────────────────
     try {
       const { output, errors: erroresRuntime, symbols } = interpretar(ast);
@@ -93,7 +91,7 @@ export class InterpreterService {
           scope:    s.scope,
           line:     s.linea,
         })),
-        ast,
+        ast: astDot,
       };
     } catch (e: any) {
       // Errores inesperados en el intérprete (bugs internos)
@@ -102,16 +100,67 @@ export class InterpreterService {
         output:  [],
         errors:  [{ type: 'semantico', message: `Error interno del intérprete: ${e.message}`, line: 0, col: 0 }],
         symbols: [],
-        ast,
+        ast: astDot,
       };
     }
   }
 
+  generateASTDot(ast: any): string {
+    let nodeId = 0;
+    const lines: string[] = ['digraph AST {'];
+    lines.push('  node [shape=box, style=filled, fillcolor=lightblue];');
+
+    const addNode = (nodo: any): number => {
+      const currentId = nodeId++;
+      const label = this.getNodeLabel(nodo);
+      lines.push(`  node${currentId} [label="${label}"];`);
+
+      // Agregar hijos según el tipo de nodo
+      const children = this.getChildren(nodo);
+      children.forEach(child => {
+        if (child) {
+          const childId = addNode(child);
+          lines.push(`  node${currentId} -> node${childId};`);
+        }
+      });
+
+      return currentId;
+    };
+
+    addNode(ast);
+    lines.push('}');
+    return lines.join('\n');
+  }
+
+private getNodeLabel(nodo: any): string {
+  if (!nodo || typeof nodo !== 'object') return String(nodo);
+  if (nodo.type === 'IntLiteral') return `Int: ${nodo.valor}`;
+  if (nodo.type === 'StringLiteral') return `String: ${nodo.valor}`;
+  if (nodo.type === 'Identifier') return `ID: ${nodo.nombre}`;
+  if (nodo.type === 'BinaryExpr') return `Op: ${nodo.operador}`;
+  return nodo.type || 'Node';
+}
+
+private getChildren(nodo: any): any[] {
+  if (!nodo || typeof nodo !== 'object') return [];
+  const children: any[] = [];
+  
+  // Campos comunes
+  if (nodo.izquierda) children.push(nodo.izquierda);
+  if (nodo.derecha) children.push(nodo.derecha);
+  if (nodo.cuerpo) children.push(...(Array.isArray(nodo.cuerpo) ? nodo.cuerpo : [nodo.cuerpo]));
+  if (nodo.condicion) children.push(nodo.condicion);
+  if (nodo.valor) children.push(nodo.valor);
+  if (nodo.args) children.push(...nodo.args);
+  
+  return children;
+}
+
   private limpiarMensajeJison(msg: string): string {
-    // Jison genera mensajes verbosos como:
-    // "Parse error on line 3:\n...expecting X, Y, Z"
-    // Extraemos solo la parte útil
     const match = msg.match(/Parse error on line \d+[^]*?(?=\n\n|$)/);
     return match ? match[0].replace(/\n/g, ' ').trim() : msg;
   }
+
+
+
 }

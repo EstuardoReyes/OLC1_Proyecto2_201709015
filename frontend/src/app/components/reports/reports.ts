@@ -1,6 +1,8 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, signal, inject, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule }  from '@angular/common';
 import { ReportsService } from '../../services/reports.service';
+import { instance } from '@viz-js/viz';
+
 
 type ReportTab = 'errores' | 'simbolos' | 'ast';
 
@@ -29,18 +31,41 @@ export class Reports {
     return this.activeTab() === tab;
   }
 
-  // Para el árbol AST colapsable
-  collapsedNodes = new Set<string>();
+  // ── Modal AST ────────────────────────────────────────────────────────
+  showAstModal = signal<boolean>(false);
 
-  toggleNode(path: string): void {
-    if (this.collapsedNodes.has(path)) {
-      this.collapsedNodes.delete(path);
-    } else {
-      this.collapsedNodes.add(path);
-    }
+  /** Abre el modal y renderiza el SVG del AST */
+  async openAstModal() {
+    const dotString = this.reportsService.ast();
+    if (!dotString) return;
+
+    this.showAstModal.set(true);
+
+    // Esperar al siguiente ciclo para que el DOM esté listo
+    setTimeout(async () => {
+      const viz = await instance();
+      const svg = viz.renderSVGElement(dotString);
+
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+      svg.style.width  = '100%';
+      svg.style.height = '100%';
+
+      const container = document.getElementById('ast-modal-content');
+      if (container) {
+        container.innerHTML = '';
+        container.appendChild(svg);
+      }
+    }, 0);
   }
 
-  isCollapsed(path: string): boolean {
-    return this.collapsedNodes.has(path);
+  closeAstModal() {
+    this.showAstModal.set(false);
+  }
+
+  /** Cerrar con Escape */
+  onModalKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') this.closeAstModal();
   }
 }
+

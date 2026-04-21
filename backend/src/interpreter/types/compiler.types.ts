@@ -42,5 +42,5 @@ export interface CompileResponse {
   output:  string[];          // líneas de consola (fmt.Println, etc.)
   errors:  CompilerError[];
   symbols: SymbolEntry[];
-  ast:     ASTNode | null;
+  ast:     string | null;     // string en formato DOT para Graphviz
 }

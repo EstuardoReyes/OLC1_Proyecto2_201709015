@@ -111,20 +111,69 @@
 
     <!-- ── Tab AST ── -->
     @if (isTab('ast')) {
-      @if (!reportsService.ast()) {
+      @if (reportsService.ast()) {
+        <div class="flex flex-col items-center justify-center h-36 gap-3">
+          <span class="text-3xl">🌳</span>
+          <span class="text-xs text-[#cccccc] font-sans">AST generado correctamente</span>
+          <button
+            (click)="openAstModal()"
+            class="flex items-center gap-2 px-4 py-2 bg-[#EF9F27] hover:bg-[#d48c1f] text-[#1a1a1a] text-[11px] font-bold font-sans rounded transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+            Ver AST completo
+          </button>
+        </div>
+      } @else {
         <div class="flex flex-col items-center justify-center h-36 gap-2">
           <span class="text-2xl text-[#3a3a3a]">⊘</span>
           <span class="text-xs text-[#6b6b6b] font-sans">AST no generado</span>
-          <span class="text-[11px] text-[#444] font-sans">Ejecuta el código para ver el árbol</span>
-        </div>
-      } @else {
-        <div class="p-2 font-mono text-[11px]">
-          <!-- Árbol AST renderizado recursivamente via JSON por ahora -->
-          <!-- Cuando integres el parser, este nodo será el AST real -->
-          <pre class="text-[#d4d4d4] whitespace-pre-wrap break-all text-[10px]">{{ reportsService.ast() | json }}</pre>
+          <span class="text-[11px] text-[#444] font-sans">Ejecuta el código para visualizar</span>
         </div>
       }
     }
 
   </div>
 </div>
+
+<!-- ── Modal AST ── -->
+@if (showAstModal()) {
+  <div
+    class="fixed inset-0 z-50 flex flex-col bg-[#0d0d0d]/95 backdrop-blur-sm"
+    (keydown)="onModalKeydown($event)"
+    tabindex="0">
+
+    <!-- Barra superior del modal -->
+    <div class="flex items-center justify-between px-4 py-2 bg-[#1e1e1e] border-b border-[#333] shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">🌳</span>
+        <span class="text-[#cccccc] text-sm font-sans font-semibold">Árbol Sintáctico Abstracto (AST)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] text-[#5F5E5A] font-sans">Usa el scroll para hacer zoom · arrastra para moverse</span>
+        <button
+          (click)="closeAstModal()"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] hover:text-white text-[11px] font-sans rounded transition-colors border border-[#3a3a3a]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+          Cerrar
+        </button>
+      </div>
+    </div>
+
+    <!-- Contenedor del SVG con scroll -->
+    <div
+      id="ast-modal-content"
+      class="flex-1 overflow-auto p-4 flex items-start justify-center"
+      style="background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0d0d0d 100%);">
+      <!-- El SVG se inyecta aquí desde el componente -->
+    </div>
+
+    <!-- Pie del modal -->
+    <div class="flex items-center justify-center py-1.5 bg-[#1e1e1e] border-t border-[#333] shrink-0">
+      <span class="text-[10px] text-[#444] font-sans">Presiona <kbd class="px-1 py-0.5 bg-[#2a2a2a] rounded text-[#666] text-[9px]">Esc</kbd> para cerrar</span>
+    </div>
+
+  </div>
+}

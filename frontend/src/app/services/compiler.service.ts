@@ -9,7 +9,7 @@ export interface CompileResponse {
   output:  string[];
   errors:  { line: number; col: number; type: 'lexico'|'sintactico'|'semantico'; message: string }[];
   symbols: { name: string; kind: 'variable'|'funcion'|'parametro'|'struct'; dataType: string; scope: string; line: number }[];
-  ast:     any | null;
+  ast:     string | null;   // DOT string para Graphviz
 }
 
 /**
