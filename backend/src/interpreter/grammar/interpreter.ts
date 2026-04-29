@@ -191,8 +191,6 @@ function ejecutarAppendCall(nodo: any, contexto: ContextoEjecucion): any {
   let slice = entorno.get(nodo.slice);
   const sliceTipo = entorno.getTipo(nodo.slice);
   
-  console.log('slice:', slice, 'tipo:', sliceTipo);
-  
   const nuevoValor = extraerValor(ejecutarNodo(nodo.valor, contexto));
   
   if (!Array.isArray(slice)) {
@@ -289,7 +287,7 @@ function ejecutarAttrAccess(nodo: any, contexto: ContextoEjecucion): any {
     return undefined;
   }
   
-  return { valor: objeto[nodo.atributo], tipo: typeof objeto[nodo.atributo] };
+  return { valor: objeto[nodo.atributo], tipo: inferirTipo(objeto[nodo.atributo]) };
 }
 
 function ejecutarAttrAssign(nodo: any, contexto: ContextoEjecucion): any {
@@ -403,8 +401,8 @@ function ejecutarDecrement(nodo: any, contexto: ContextoEjecucion) {
 
 function ejecutarIf(nodo: any, contexto: ContextoEjecucion): any {
   const { entorno, output, errors, symbols, funciones, structs, scope } = contexto;
-  const condicion = ejecutarNodo(nodo.condicion, contexto);
-  if (condicion.valor) {
+  const condicion = extraerValor(ejecutarNodo(nodo.condicion, contexto));
+  if (condicion) {
     ejecutarBloque(nodo.cuerpo, { entorno: new Entorno(entorno, `if_then_${Date.now()}`), output, errors, symbols, funciones, structs, scope });
   } else {
     if (nodo.cuerpo_else == null) { return; }
@@ -419,7 +417,7 @@ function ejecutarElse(nodo: any, contexto: ContextoEjecucion): any {
 
 function ejecutarSwitch(nodo: any, contexto: ContextoEjecucion): any {
   const { entorno, output, errors, symbols, funciones, structs, scope } = contexto;
-  const valorSwitch = ejecutarNodo(nodo.discriminante, contexto);
+  const valorSwitch = extraerValor(ejecutarNodo(nodo.discriminante, contexto));
   let casoEjecutado = false;
   let defaultCaso: any = null;
   for (const caso of nodo.casos) {
@@ -427,7 +425,7 @@ function ejecutarSwitch(nodo: any, contexto: ContextoEjecucion): any {
       defaultCaso = caso;
       continue;
     }
-    const valorCaso = ejecutarNodo(caso.condicion, contexto);
+    const valorCaso = extraerValor(ejecutarNodo(caso.condicion, contexto));
     if (valorCaso === valorSwitch) {
       ejecutarBloque(caso.cuerpo, { entorno: new Entorno(entorno, `switch_case_${Date.now()}`), output, errors, symbols, funciones, structs, scope });
       casoEjecutado = true;
@@ -568,7 +566,6 @@ function ejecutarSliceAssign(nodo: any, contexto: ContextoEjecucion): any {
 function ejecutarLenCall(nodo: any, contexto: ContextoEjecucion): any {
   const { entorno, errors } = contexto;
   const valor = extraerValor(ejecutarNodo(nodo.arg, contexto));
-  console.log('len call, slice:', valor, valor.length);
   const sliceTipo = entorno.getTipo(nodo.arg.nombre);
   if (!Array.isArray(valor)) {
     if (sliceTipo === 'Tiposlice') {
